@@ -1,0 +1,13 @@
+# Builds and local state.
+dist/
+.mygo/
+
+# macOS.
+.DS_Store
+
+# Editors.
+.idea/
+.vscode/
+
+# Local app binary.
+apps/desktop/hiik

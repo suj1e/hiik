@@ -1,0 +1,28 @@
+name: Bug
+description: Something is broken.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps, expected and actual.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: hiik version
+  - type: input
+    id: core
+    attributes:
+      label: herdr-core version (`hc -V`)
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [macOS, Linux, Windows]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Redact terminal contents and paths you do not want to share.

@@ -1,0 +1,104 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: "macOS: vet, tests, checks, cross-build"
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+          cache-dependency-path: apps/desktop/go.sum
+
+      - name: Vet the app
+        run: cd apps/desktop && go vet ./...
+
+      - name: Test the app
+        run: cd apps/desktop && go test ./...
+
+      - name: Vet and test the scripts
+        run: |
+          cd scripts
+          go vet ./...
+          go test ./...
+
+      - name: Docs, contracts and version
+        run: |
+          cd scripts
+          go run ./check-docs
+          go run ./check-contracts
+          go run ./check-version
+
+      - name: Cross-build
+        run: |
+          cd apps/desktop
+          for target in darwin/arm64 linux/amd64 windows/amd64; do
+            echo "build $target"
+            CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build ./...
+          done
+
+  linux:
+    name: "Linux: build and vet"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+          cache-dependency-path: apps/desktop/go.sum
+
+      - name: Build
+        run: cd apps/desktop && CGO_ENABLED=0 go build ./...
+
+      - name: Vet
+        run: cd apps/desktop && go vet ./...
+
+      - name: Test the release scripts
+        run: |
+          cd scripts
+          go vet ./...
+          go test ./...
+
+  windows:
+    name: "Windows: vet, tests, build"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+          cache-dependency-path: apps/desktop/go.sum
+
+      - name: Vet the app
+        shell: bash
+        run: cd apps/desktop && go vet ./...
+
+      - name: Test the core
+        shell: bash
+        run: cd apps/desktop && go test ./core
+
+      - name: Build
+        shell: bash
+        run: cd apps/desktop && CGO_ENABLED=0 go build ./...
+
+      - name: Test the release scripts
+        shell: bash
+        run: |
+          cd scripts
+          go vet ./...
+          go test ./...
+

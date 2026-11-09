@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hiik.dev/schemas/state.json",
+  "title": "hiik state",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "activeSpace": { "type": "string" },
+    "spaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/space" }
+    },
+    "ui": { "$ref": "#/$defs/ui" }
+  },
+  "$defs": {
+    "space": {
+      "type": "object",
+      "required": ["id", "name", "folder", "tabs"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "folder": { "type": "string" },
+        "machine": { "type": "string" },
+        "activeTab": { "type": "integer", "minimum": 0 },
+        "tabs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tab" }
+        }
+      }
+    },
+    "tab": {
+      "type": "object",
+      "required": ["id", "name", "root"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "focus": { "type": "string" },
+        "root": { "$ref": "#/$defs/node" }
+      }
+    },
+    "node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "terminal"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "terminal": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["id", "a", "b"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "vertical": { "type": "boolean" },
+            "ratio": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+            "a": { "$ref": "#/$defs/node" },
+            "b": { "$ref": "#/$defs/node" }
+          }
+        }
+      ]
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sidebarW": { "type": "number", "minimum": 160 },
+        "zoomed": { "type": "string" },
+        "focus": { "type": "string" }
+      }
+    }
+  }
+}

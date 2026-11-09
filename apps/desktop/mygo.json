@@ -1,0 +1,10 @@
+{
+  "name": "hiik",
+  "slug": "hiik",
+  "identifier": "dev.hiik.app",
+  "version": "0.1.0",
+  "copyright": "Copyright © 2026 suj1e",
+  "license": "MIT",
+  "out": "dist",
+  "macos": { "minimumSystemVersion": "13.0" }
+}

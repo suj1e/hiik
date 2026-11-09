@@ -1,0 +1,96 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Unsigned packages
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+          cache-dependency-path: apps/desktop/go.sum
+
+      - name: Install NSIS for the Windows installer
+        run: brew install nsis
+
+      - name: Check the tag against mygo.json
+        run: |
+          version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' apps/desktop/mygo.json)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match mygo.json version $version" >&2
+            exit 1
+          fi
+
+      - name: Build unsigned packages
+        run: |
+          cd apps/desktop
+          go tool mygo build -platform darwin/universal,windows/amd64,linux/amd64
+
+      - name: Check the artifacts
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          cd apps/desktop/dist
+          find . -type f | sort
+          test -f "darwin-universal/hiik-$version.dmg"
+          test -f "windows-amd64/hiik-setup-$version-amd64.exe"
+          test -f "linux-amd64/hiik_${version}_amd64.deb"
+          test -f "linux-amd64/hiik-$version-linux-amd64.tar.gz"
+          cd ../../../scripts
+          go run ./check-version -root .. -dist ../apps/desktop/dist
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiik-${{ github.ref_name }}
+          path: apps/desktop/dist/**
+          if-no-files-found: error
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          files=$(find apps/desktop/dist -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.tar.gz' \) | sort)
+          gh release create "$GITHUB_REF_NAME" $files --generate-notes
+
+  accept:
+    name: "Runtime acceptance (${{ matrix.platform }})"
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+          cache-dependency-path: apps/desktop/go.sum
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hiik-${{ github.ref_name }}
+          path: apps/desktop/dist
+
+      - name: Check the artifacts and print the runtime steps
+        shell: bash
+        run: |
+          cd scripts
+          go run ./accept-runtime -root .. -dist ../apps/desktop/dist -platform ${{ matrix.platform }}
+
