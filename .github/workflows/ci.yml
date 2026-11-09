@@ -10,7 +10,7 @@ permissions:
 jobs:
   macos:
     name: "macOS: vet, tests, checks, cross-build"
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
