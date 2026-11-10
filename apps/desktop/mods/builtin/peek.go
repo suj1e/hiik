@@ -76,22 +76,22 @@ func renderPeekPanel(rc *api.RenderContext) {
 		Background(t.Surface).
 		Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Peek").FontSize(12).Bold()
+				ui.Text(c, "Peek").FontSize(t.FontSize - 1).Bold()
 				ui.Box(c).Grow(1)
 				if status != "" {
-					ui.Text(c, status).FontSize(10).TextColor(t.TextMuted)
+					ui.Text(c, status).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 				}
 			})
-			ui.Text(c, address).FontSize(12).Font("monospace").Selectable().SingleLine()
+			ui.Text(c, address).FontSize(t.FontSize - 1).Font("monospace").Selectable().SingleLine()
 			if title != "" {
-				ui.Text(c, title).FontSize(11).TextColor(t.TextMuted).SingleLine().Tooltip(title)
+				ui.Text(c, title).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine().Tooltip(title)
 			}
 			if space != "" {
-				ui.Text(c, "space "+space).FontSize(10).TextColor(t.TextMuted).SingleLine()
+				ui.Text(c, "space "+space).FontSize(t.FontSize - 3).TextColor(t.TextMuted).SingleLine()
 			}
 			ui.Box(c).Grow(1)
 			if errText != "" {
-				ui.Text(c, errText).FontSize(10).TextColor(t.Danger).SingleLine().Tooltip(errText)
+				ui.Text(c, errText).FontSize(t.FontSize - 3).TextColor(t.Danger).SingleLine().Tooltip(errText)
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				if ui.PrimaryButton(c.Key("peek/keep"), "Keep as tab").Clicked() {
@@ -150,12 +150,9 @@ func runPeekCommand(rc *api.RenderContext, address, command string, keep bool) {
 		peekMu.Unlock()
 		return
 	}
-	args := map[string]any{
-		"address":  address,
-		"terminal": address,
-	}
+	args := map[string]any{"terminal": address}
 	if keep {
-		args["keep"] = true
+		args["place"] = "tab"
 	}
 	err := rc.App.Run(command, args)
 	peekMu.Lock()

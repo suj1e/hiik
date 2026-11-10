@@ -4,13 +4,14 @@ import (
 	"runtime"
 
 	mui "github.com/egoist/mygo/ui"
+
+	"hiik/icons"
 )
 
-// The sidebar's geometry, matching the reference app: a wide default, a rail
-// below the compact threshold, and a brand and footer that stay put around
-// the two lists.
+// The sidebar's geometry: a compact default, a rail below the compact
+// threshold, and a brand and footer that stay put around the two lists.
 const (
-	sidebarDefaultW = 268
+	sidebarDefaultW = 228
 	sidebarRailW    = 44
 	sidebarMacRailW = 76
 	sidebarCompactW = 160
@@ -61,7 +62,7 @@ func (s *Shell) sidebarBrand(c *mui.Context) {
 	t := c.Theme()
 	row := mui.Row(c).
 		FillWidth().
-		Height(46).
+		Height(40).
 		AlignItems(mui.Center).
 		DragWindow()
 	if s.sidebarCompact() {
@@ -84,7 +85,7 @@ func (s *Shell) sidebarBrand(c *mui.Context) {
 				tile.Background(t.AccentHover)
 			}
 			tile.Children(func() {
-				mui.Text(c, "h").FontSize(15).Bold().TextColor(t.AccentText)
+				mui.Icon(c, icons.Mark).FontSize(t.FontSize + 3).TextColor(t.AccentText)
 			})
 		})
 		return
@@ -93,32 +94,30 @@ func (s *Shell) sidebarBrand(c *mui.Context) {
 	if runtime.GOOS == "darwin" {
 		left = max(left, 76)
 	}
-	row.Padding(0, 10, 0, left).Gap(4).Children(func() {
-		mui.Row(c).
-			Size(20, 20).
-			Radius(5).
-			Background(t.Accent).
-			Justify(mui.Center).
-			AlignItems(mui.Center).
-			Children(func() {
-				mui.Text(c, "h").FontSize(12).Bold().TextColor(t.AccentText)
-			})
-		mui.Text(c, "hiik").FontSize(13.5).Bold().TextColor(t.Text).SingleLine()
+	row.Padding(0, t.Space(2.5), 0, left).Gap(t.Space(1.5)).Children(func() {
+		mui.Icon(c, icons.Mark).FontSize(t.FontSize + 5).TextColor(t.Accent)
+		mui.Text(c, "hiik").FontSize(t.FontSize + 0.5).Bold().TextColor(t.Text).SingleLine()
 		mui.Box(c).Grow(1)
-		s.sidebarIconButton(c, "P", "Command palette ("+shortcutLabel("P")+")", s.openPalette)
-		s.sidebarIconButton(c, "«", "Collapse sidebar", s.toggleSidebar)
+		chord := s.paletteChord()
+		tip := "Command palette"
+		if chord != "" {
+			tip += " (" + chord + ")"
+		}
+		s.sidebarIconButton(c, icons.Search, tip, s.openPalette)
+		s.sidebarIconButton(c, icons.PanelLeft, "Collapse sidebar", s.toggleSidebar)
 	})
 }
 
-// sidebarIconButton is one 26px square button of the sidebar brand row.
-func (s *Shell) sidebarIconButton(c *mui.Context, glyph, tip string, fn func()) {
+// sidebarIconButton is one square icon button of the sidebar brand row.
+func (s *Shell) sidebarIconButton(c *mui.Context, icon *mui.SVG, tip string, fn func()) {
 	t := c.Theme()
 	button := mui.Row(c).
-		Size(26, 26).
-		Radius(6).
+		Size(t.Space(6), t.Space(6)).
+		Radius(t.Radius).
 		Justify(mui.Center).
 		AlignItems(mui.Center).
 		Tooltip(tip).
+		Label(tip).
 		Cursor(mui.CursorPointer).
 		OnClick(fn)
 	color := t.TextMuted
@@ -127,7 +126,7 @@ func (s *Shell) sidebarIconButton(c *mui.Context, glyph, tip string, fn func()) 
 		color = t.Text
 	}
 	button.Children(func() {
-		mui.Text(c, glyph).FontSize(13).TextColor(color)
+		mui.Icon(c, icon).FontSize(t.FontSize + 1).TextColor(color)
 	})
 }
 
@@ -174,9 +173,9 @@ func (s *Shell) sidebarFooterRow(c *mui.Context, label, glyph string, fn func())
 		row.FillWidth().Padding(0, 8).Gap(9)
 	}
 	row.Children(func() {
-		mui.Text(c, glyph).FontSize(14).TextColor(color)
+		mui.Text(c, glyph).FontSize(t.FontSize + 1).TextColor(color)
 		if !compact {
-			mui.Text(c, label).FontSize(13).TextColor(color).SingleLine()
+			mui.Text(c, label).FontSize(t.FontSize).TextColor(color).SingleLine()
 		}
 	})
 }

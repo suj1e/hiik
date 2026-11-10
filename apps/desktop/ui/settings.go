@@ -177,7 +177,7 @@ func (s *Shell) settingsNav(c *mui.Context, t *mui.Theme) {
 		Background(t.Surface).
 		Children(func() {
 			mui.Text(c, "Settings").
-				FontSize(16).
+				FontSize(t.FontSize+3).
 				Bold().
 				TextColor(t.Text).
 				Padding(8, 10, 12, 10)
@@ -198,7 +198,7 @@ func (s *Shell) settingsNav(c *mui.Context, t *mui.Theme) {
 					if selected {
 						color = t.Text
 					}
-					mui.Text(c, sec.Title).FontSize(13).TextColor(color)
+					mui.Text(c, sec.Title).FontSize(t.FontSize).TextColor(color)
 				})
 			}
 			mui.Box(c).Grow(1)
@@ -219,7 +219,7 @@ func (s *Shell) settingsPage(c *mui.Context, t *mui.Theme, settings map[string]a
 				Gap(4).
 				Children(func() {
 					mui.Text(c, strings.ToUpper(settingsTitle(id))).
-						FontSize(11).
+						FontSize(t.FontSize-2).
 						Bold().
 						TextColor(t.TextMuted).
 						Padding(0, 0, 8, 0)
@@ -245,7 +245,7 @@ func (s *Shell) settingsPage(c *mui.Context, t *mui.Theme, settings map[string]a
 // settingsHeading draws a small uppercase heading above a group of rows.
 func settingsHeading(c *mui.Context, title string) {
 	mui.Text(c, strings.ToUpper(title)).
-		FontSize(10).
+		FontSize(c.Theme().FontSize-3).
 		Bold().
 		TextColor(c.Theme().TextMuted).
 		Padding(10, 0, 6, 0)
@@ -254,7 +254,7 @@ func settingsHeading(c *mui.Context, title string) {
 // settingsNote draws a muted explanation.
 func settingsNote(c *mui.Context, text string) {
 	mui.Text(c, text).
-		FontSize(11).
+		FontSize(c.Theme().FontSize-2).
 		TextColor(c.Theme().TextMuted).
 		Padding(8, 0, 2, 0)
 }
@@ -272,9 +272,9 @@ func settingsRow(c *mui.Context, title, about string, control func()) {
 		BorderColor(t.Border).
 		Children(func() {
 			mui.Column(c).Grow(1).Gap(2).Children(func() {
-				mui.Text(c, title).FontSize(13).TextColor(t.Text)
+				mui.Text(c, title).FontSize(t.FontSize).TextColor(t.Text)
 				if about != "" {
-					mui.Text(c, about).FontSize(11).TextColor(t.TextMuted)
+					mui.Text(c, about).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 				}
 			})
 			mui.Row(c).Shrink(0).Gap(6).AlignItems(mui.Center).Children(control)
@@ -489,7 +489,7 @@ func (s *Shell) settingsLayoutCard(c *mui.Context, t *mui.Theme, value, title st
 			Radius(6).
 			Background(t.Surface).
 			Children(func() { settingsLayoutPreview(c, t, value) })
-		mui.Text(c, title).FontSize(11).TextColor(t.Text)
+		mui.Text(c, title).FontSize(t.FontSize - 2).TextColor(t.Text)
 	})
 }
 
@@ -683,7 +683,7 @@ func (s *Shell) settingsThemeCard(c *mui.Context, t *mui.Theme, value, title str
 					}
 				})
 			})
-		mui.Text(c, title).FontSize(11).TextColor(t.Text).SingleLine()
+		mui.Text(c, title).FontSize(t.FontSize - 2).TextColor(t.Text).SingleLine()
 	})
 }
 
@@ -805,7 +805,7 @@ func (s *Shell) settingsKeyboard(c *mui.Context, settings map[string]any, d *set
 				return
 			}
 			pill := mui.Text(c, chord).
-				FontSize(11).
+				FontSize(c.Theme().FontSize-2).
 				TextColor(c.Theme().TextMuted).
 				Padding(2, 7).
 				Radius(c.Theme().Radius).
@@ -825,7 +825,7 @@ func (s *Shell) settingsKeyboard(c *mui.Context, settings map[string]any, d *set
 	}
 	if d.keyError != "" {
 		mui.Text(c, d.keyError).
-			FontSize(11).
+			FontSize(c.Theme().FontSize-2).
 			TextColor(c.Theme().Danger).
 			Padding(8, 0, 2, 0)
 	}
@@ -861,8 +861,8 @@ func (s *Shell) settingsMachines(c *mui.Context) {
 		Children(func() {
 			mui.Box(c).Size(8, 8).Radius(4).Background(t.Success)
 			mui.Column(c).Grow(1).Gap(2).Children(func() {
-				mui.Text(c, "This computer").FontSize(13).TextColor(t.Text)
-				mui.Text(c, "Connected · core "+version).FontSize(11).TextColor(t.TextMuted)
+				mui.Text(c, "This computer").FontSize(t.FontSize).TextColor(t.Text)
+				mui.Text(c, "Connected · core "+version).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 			})
 		})
 	mui.Box(c).Height(6)

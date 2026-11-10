@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	mui "github.com/egoist/mygo/ui"
@@ -73,8 +74,11 @@ func TestTerminalLookFollowsTheme(t *testing.T) {
 	if theme.Palette[0] != tm.Background {
 		t.Error("palette black is not the theme's background in a dark theme")
 	}
-	if font.Family != "Menlo" || font.Size != 15 {
+	if !strings.HasPrefix(font.Family, "Menlo") || font.Size != 15 {
 		t.Errorf("font = %#v", font)
+	}
+	if !strings.Contains(font.Family, "Noto Sans Mono CJK SC") {
+		t.Errorf("font has no CJK fallback: %q", font.Family)
 	}
 }
 
@@ -85,6 +89,9 @@ func TestTerminalLookDefaults(t *testing.T) {
 	}
 	if font.Size != defaultTerminalSize {
 		t.Errorf("size = %g", font.Size)
+	}
+	if !strings.HasPrefix(font.Family, "monospace") || !strings.Contains(font.Family, "Sarasa Mono SC") {
+		t.Errorf("family = %q", font.Family)
 	}
 }
 

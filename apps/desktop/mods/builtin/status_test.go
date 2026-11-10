@@ -77,7 +77,7 @@ func TestStatusPaletteHintUsesTheBinding(t *testing.T) {
 		keys: []api.KeyBinding{{Command: api.CmdPalette, Chord: "ctrl-p", Section: "global"}},
 	}
 	tt := renderStatusPanel(t, app, nil)
-	want := statusChordLabel("ctrl-p")
+	want := api.FormatChord("ctrl-p")
 	if !tt.HasText(want) {
 		t.Fatalf("the hint does not show the real binding %q: %v", want, tt.Texts())
 	}
@@ -98,7 +98,7 @@ func TestStatusPaletteHintWithoutABinding(t *testing.T) {
 	if !tt.HasText("commands") {
 		t.Fatalf("an unbound palette shows no hint: %v", tt.Texts())
 	}
-	if tt.HasText(statusChordLabel("ctrl-k")) {
+	if tt.HasText(api.FormatChord("ctrl-k")) {
 		t.Fatalf("an unbound palette invented a key: %v", tt.Texts())
 	}
 }

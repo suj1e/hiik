@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/egoist/mygo"
 )
 
 // UpdateAsset is one file a release offers. The app downloads the asset it
@@ -461,22 +463,11 @@ func downloadAsset(ctx context.Context, url, path string) error {
 	return nil
 }
 
-// openDownloaded opens a downloaded file with the desktop's handler. It
-// starts the opener and reaps it in the background.
+// openDownloaded opens a downloaded file with the desktop's handler.
 func openDownloaded(path string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", path)
-	case "windows":
-		cmd = exec.Command("explorer", path)
-	default:
-		cmd = exec.Command("xdg-open", path)
-	}
-	if err := cmd.Start(); err != nil {
+	if err := mygo.Shell.OpenPath(path); err != nil {
 		return fmt.Errorf("updates: open %s: %w", path, err)
 	}
-	go func() { _ = cmd.Wait() }()
 	return nil
 }
 

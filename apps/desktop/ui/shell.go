@@ -13,6 +13,8 @@ import (
 	mui "github.com/egoist/mygo/ui"
 
 	"hiik/core/hc"
+	"hiik/icons"
+	"hiik/keys"
 	"hiik/mods/api"
 )
 
@@ -118,7 +120,6 @@ type Shell struct {
 	welcomeOpen       bool
 	installUpdateOpen bool
 	paneArea          mui.Rect
-	paneDrag          paneDragState
 	paletteQuery      string
 	paletteSel        int
 	paletteList       mui.ListState
@@ -180,18 +181,22 @@ func New(app App) *Shell {
 	return s
 }
 
-// Open shows the window.
+// Open shows the window. macOS draws its chrome under the traffic lights;
+// Windows and Linux keep the system title bar and its window buttons.
 func (s *Shell) Open() {
-	s.win = mygo.NewWindow(mygo.WindowOptions{
-		Title:         "hiik",
-		Width:         1180,
-		Height:        760,
-		MinWidth:      820,
-		MinHeight:     520,
-		StateKey:      "main",
-		TitleBarStyle: mygo.TitleBarHidden,
-		Content:       mui.View(s.View),
-	})
+	opts := mygo.WindowOptions{
+		Title:     "hiik",
+		Width:     1180,
+		Height:    760,
+		MinWidth:  820,
+		MinHeight: 520,
+		StateKey:  "main",
+		Content:   mui.View(s.View),
+	}
+	if runtime.GOOS == "darwin" {
+		opts.TitleBarStyle = mygo.TitleBarHidden
+	}
+	s.win = mygo.NewWindow(opts)
 	if setter, ok := s.app.(interface{ SetInvalidator(func()) }); ok {
 		setter.SetInvalidator(s.wake)
 	}
@@ -211,6 +216,15 @@ func (s *Shell) Close() {
 		for _, ts := range terms {
 			detachPaneTerm(ts)
 		}
+		floatMu.Lock()
+		delete(floats, s)
+		floatMu.Unlock()
+		floatLayoutMu.Lock()
+		delete(floatLayouts, s)
+		floatLayoutMu.Unlock()
+		modSurfaceMu.Lock()
+		delete(modSurfaces, s)
+		modSurfaceMu.Unlock()
 	})
 }
 
@@ -314,7 +328,8 @@ func (s *Shell) View(c *mui.Context) {
 		s.toast = ""
 		c.Toast(msg)
 	}
-	DrainNotifications(c)
+	away := s.win != nil && (!s.win.IsFocused() || s.win.IsMinimized())
+	DrainNotifications(c, away)
 }
 
 // activeTab returns the selected space and its active tab, nil when there is
@@ -350,8 +365,8 @@ func (s *Shell) titleBar(c *mui.Context) {
 		DragWindow().
 		Background(t.Surface).
 		Children(func() {
-			mui.Text(c, "hiik").FontSize(13).Bold()
-			mui.Text(c, s.connectionLabel()).FontSize(11).TextColor(t.TextMuted)
+			mui.Text(c, "hiik").FontSize(t.FontSize).Bold()
+			mui.Text(c, s.connectionLabel()).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 			mui.Box(c).Grow(1)
 			s.paletteChip(c)
 		})
@@ -448,7 +463,7 @@ func (s *Shell) paletteChip(c *mui.Context) {
 		Label("Command palette").
 		OnClick(s.openPalette).
 		Children(func() {
-			mui.Text(c, label).FontSize(11).TextColor(t.TextMuted)
+			mui.Text(c, label).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		})
 }
 
@@ -519,17 +534,18 @@ func (s *Shell) main(c *mui.Context, sp *api.Space, tab *api.Tab, showTabs bool)
 func (s *Shell) emptyMain(c *mui.Context) {
 	t := c.Theme()
 	mui.Column(c).Fill().Center().Gap(6).Children(func() {
-		mui.Text(c, "No space open").FontSize(15).TextColor(t.TextMuted)
-		mui.Text(c, "Create a space to start a terminal.").FontSize(12).TextColor(t.TextMuted)
+		mui.Text(c, "No space open").FontSize(t.FontSize + 2).TextColor(t.TextMuted)
+		mui.Text(c, "Create a space to start a terminal.").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
 
 func (s *Shell) tabStrip(c *mui.Context, sp *api.Space, tab *api.Tab) {
 	t := c.Theme()
+	titleBar := c.TitleBar()
 	bar := mui.Row(c).
 		FillWidth().
 		Height(tabBarHeight).
-		Padding(0, 8, 0, max(s.tabInset, 8)).
+		Padding(0, max(titleBar.Right, 8), 0, max(s.tabInset, 8)).
 		Gap(4).
 		AlignItems(mui.Center).
 		Background(t.Surface).
@@ -543,16 +559,13 @@ func (s *Shell) tabStrip(c *mui.Context, sp *api.Space, tab *api.Tab) {
 		})
 		mui.Row(c).Gap(4).AlignItems(mui.Center).Children(func() {
 			s.newTabButton(c, sp)
-			s.tabToolButton(c, "Files", filesTabIcon, s.rightOpen && s.rightTab == rightFiles, func() {
+			s.tabToolButton(c, "Files", icons.File, s.rightOpen && s.rightTab == rightFiles, func() {
 				s.toggleRightPanel(rightFiles)
 			})
-			s.tabToolButton(c, "Changes", changesTabIcon, s.rightOpen && s.rightTab == rightChanges, func() {
+			s.tabToolButton(c, "Changes", icons.Branch, s.rightOpen && s.rightTab == rightChanges, func() {
 				s.toggleRightPanel(rightChanges)
 			})
 		})
-		if runtime.GOOS != "darwin" {
-			s.windowControls(c)
-		}
 	})
 }
 
@@ -578,7 +591,7 @@ func (s *Shell) tabWheelHandler(ev mui.InputEvent) bool {
 func (s *Shell) tabRows(c *mui.Context, sp *api.Space, tab *api.Tab) {
 	if sp == nil || len(sp.Tabs) == 0 {
 		t := c.Theme()
-		mui.Text(c, "No tabs").FontSize(12).TextColor(t.TextMuted)
+		mui.Text(c, "No tabs").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		return
 	}
 	mui.ScrollHorizontal(c.Key("shell/tabs")).
@@ -616,7 +629,7 @@ func (s *Shell) tabToolButton(c *mui.Context, label string, icon *mui.SVG, on bo
 				mui.Icon(c, icon).Size(14, 14)
 			})
 		}
-		mui.Text(c, label).FontSize(12)
+		mui.Text(c, label).FontSize(t.FontSize - 1)
 	})
 	button.OnClick(fn)
 }
@@ -633,7 +646,7 @@ func (s *Shell) newTabButton(c *mui.Context, sp *api.Space) {
 		Tooltip("New tab").
 		Label("New tab")
 	button.Children(func() {
-		mui.Text(c, "+").FontSize(16).TextColor(t.TextMuted)
+		mui.Text(c, "+").FontSize(t.FontSize + 3).TextColor(t.TextMuted)
 	})
 	button.PopoverMenuButton(s.newTabMenu(sp))
 }
@@ -689,29 +702,6 @@ func (s *Shell) newTabMenu(sp *api.Space) func(*mui.Menu) {
 			s.worktreeOpen = true
 		}
 	}
-}
-
-// windowControls draws the minimize, maximize and close buttons of a
-// Windows or Linux window, where the reference app shows them in the tab
-// bar. macOS keeps its traffic lights over the sidebar.
-func (s *Shell) windowControls(c *mui.Context) {
-	t := c.Theme()
-	control := func(glyph, label, command string) {
-		button := mui.ButtonBase(c).
-			Key("shell/window/"+command).
-			Size(26, 26).
-			Radius(t.Radius + 2).
-			Center().
-			Tooltip(label).
-			Label(label)
-		button.Children(func() {
-			mui.Text(c, glyph).FontSize(12).TextColor(t.TextMuted)
-		})
-		button.OnClick(func() { s.run("window."+command, nil) })
-	}
-	control("−", "Minimize", "minimize")
-	control("□", "Maximize", "maximize")
-	control("✖", "Close window", "close")
 }
 
 // tabMenu is a tab's right-click menu.
@@ -905,7 +895,7 @@ func (s *Shell) renderPanel(c *mui.Context, id string, props map[string]any) {
 		return
 	}
 	mui.Text(c, "Panel "+id+" is unavailable").
-		FontSize(12).
+		FontSize(c.Theme().FontSize - 1).
 		TextColor(c.Theme().TextMuted).
 		Padding(12)
 }
@@ -1041,15 +1031,6 @@ func statusColor(c *mui.Context, status string) mui.Color {
 	}
 }
 
-// shortcutLabel formats a shortcut for the title bar: the command key on
-// macOS, Ctrl elsewhere.
-func shortcutLabel(key string) string {
-	if runtime.GOOS == "darwin" {
-		return "⌘" + key
-	}
-	return "Ctrl+" + key
-}
-
 // paletteChord is the key the keymap binds to the command palette, as a
 // short label, or "" when the action is unbound.
 func (s *Shell) paletteChord() string {
@@ -1058,15 +1039,16 @@ func (s *Shell) paletteChord() string {
 			continue
 		}
 		chord := strings.TrimSpace(b.Chord)
-		if isUnbound(chord) {
-			return ""
-		}
 		if chord != "" {
+			if keys.Unbound(chord) {
+				return ""
+			}
 			return chordLabel(chord)
 		}
-		// The core lists every command, including one the shell binds
-		// by default and the person has not overridden. Fall through to
-		// the shell's own binding instead of showing "commands".
+		// The core lists every command, including one the shell binds by
+		// default and the person has not overridden. An explicit empty
+		// chord is an unbound action; no chord falls through to the
+		// shell's own binding instead of showing "commands".
 		if b.Explicit {
 			return ""
 		}
@@ -1088,72 +1070,14 @@ func (s *Shell) paletteHint() string {
 	return "commands"
 }
 
-// chordLabel formats a canonical chord as the platform shows it: ⌘ and ⇧
-// on macOS, Ctrl+ and Shift+ elsewhere. Both "Ctrl+K" and "ctrl-k" are
-// read, as core's keymap and a test may spell them.
+// chordLabel formats a canonical chord as the platform shows it.
 func chordLabel(chord string) string {
-	raw := strings.TrimSpace(chord)
-	if raw == "" {
-		return ""
-	}
-	sep := "+"
-	if !strings.Contains(raw, "+") && strings.Contains(raw, "-") {
-		sep = "-"
-	}
-	parts := strings.Split(raw, sep)
-	key := parts[len(parts)-1]
-	if key == "" && len(parts) > 1 {
-		key = parts[len(parts)-2]
-		parts = parts[:len(parts)-2]
-	}
-	var mods []string
-	for _, part := range parts[:len(parts)-1] {
-		switch strings.ToLower(strings.TrimSpace(part)) {
-		case "cmd", "command", "super", "meta", "mod":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⌘")
-			} else {
-				mods = append(mods, "Cmd+")
-			}
-		case "ctrl", "control":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⌃")
-			} else {
-				mods = append(mods, "Ctrl+")
-			}
-		case "alt", "opt", "option":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⌥")
-			} else {
-				mods = append(mods, "Alt+")
-			}
-		case "shift":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⇧")
-			} else {
-				mods = append(mods, "Shift+")
-			}
-		}
-	}
-	key = strings.ToUpper(key)
-	if key == "" {
-		return ""
-	}
-	if runtime.GOOS == "darwin" {
-		return strings.Join(mods, "") + key
-	}
-	prefix := strings.Join(mods, "")
-	return prefix + key
+	return api.FormatChord(chord)
 }
 
-// shortcutMods is the modifier of the app's shortcuts: Command on macOS,
-// Control+Shift elsewhere.
-func shortcutMods() mui.Modifiers {
-	if runtime.GOOS == "darwin" {
-		return mui.Cmd
-	}
-	return mui.Ctrl | mui.Shift
-}
+// shortcutMods is the modifier of the app's shortcuts, as keys.Parse reads
+// Mod.
+func shortcutMods() mui.Modifiers { return keys.ShortcutMods() }
 
 // registerShortcuts binds the app's keys for this frame. The terminal keeps
 // every key the app does not bind. The keys setting replaces the chord of an

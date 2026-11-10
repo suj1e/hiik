@@ -463,7 +463,7 @@ func TestRightPanelToggles(t *testing.T) {
 	}
 }
 
-func TestPeekOpensForAnAgentOutsideTheTab(t *testing.T) {
+func TestAgentClickFocusesOutsideTheTab(t *testing.T) {
 	app := &fakeApp{
 		active: "s1",
 		spaces: []api.Space{{ID: "s1", Name: "alpha", Tabs: []api.Tab{{
@@ -471,24 +471,16 @@ func TestPeekOpensForAnAgentOutsideTheTab(t *testing.T) {
 		}}}},
 		agents: []api.Agent{{Address: "agent-1", Title: "reviewer", Space: "s1", Tab: "t1"}},
 	}
-	s, tt := newTestShell(app)
+	_, tt := newTestShell(app)
 	if err := tt.Click("reviewer"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if s.peek != "agent-1" {
-		t.Fatalf("the agent outside the tab did not peek: %q", s.peek)
+	if len(app.ran) == 0 || app.ran[len(app.ran)-1] != api.CmdAgentFocus {
+		t.Fatalf("clicking the agent ran %v, want %s", app.ran, api.CmdAgentFocus)
 	}
-	if !tt.HasText("Keep as tab") {
-		t.Fatalf("the peek panel did not render: %q", tt.Texts())
-	}
-	tt.Key(0, mui.KeyEscape)
-	tt.Frame()
-	if s.peek != "" {
-		t.Fatalf("closing the peek left %q", s.peek)
-	}
-	if tt.HasText("Keep as tab") {
-		t.Fatalf("the closed peek still renders: %q", tt.Texts())
+	if got := app.ranArgs[len(app.ranArgs)-1]["address"]; got != "agent-1" {
+		t.Fatalf("focus address = %v, want agent-1", got)
 	}
 }
 

@@ -3,6 +3,7 @@ package ui
 import (
 	mui "github.com/egoist/mygo/ui"
 
+	"hiik/icons"
 	"hiik/mods/api"
 )
 
@@ -40,5 +41,11 @@ func (s *Shell) paneMenu(m *mui.Menu, n *api.Node) {
 
 // paneMenuButton draws the pane header's "more" menu button.
 func (s *Shell) paneMenuButton(c *mui.Context, n *api.Node) {
-	mui.MenuButton(c, "⋯", func(m *mui.Menu) { s.paneMenu(m, n) }).Height(20)
+	button := mui.MenuButton(c, "", func(m *mui.Menu) { s.paneMenu(m, n) }).
+		Height(20).
+		Label("Pane menu").
+		Tooltip("Pane menu")
+	button.Children(func() {
+		mui.Icon(c, icons.More).FontSize(c.Theme().FontSize + 1).TextColor(c.Theme().TextMuted)
+	})
 }

@@ -39,9 +39,9 @@ func drawAbout(rc *api.RenderContext) {
 	draft := ui.Local(root, "feedback", func() string { return "" })
 
 	root.Children(func() {
-		ui.Text(c, "hiik").FontSize(20).Bold()
-		ui.Text(c, "Native desktop client for herdr-core").FontSize(12).TextColor(t.TextMuted)
-		ui.Text(c, "Version "+aboutVersion).FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, "hiik").FontSize(t.FontSize + 7).Bold()
+		ui.Text(c, "Native desktop client for herdr-core").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		ui.Text(c, "Version "+aboutVersion).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 
 		ui.Row(c).Gap(8).Children(func() {
 			if ui.Button(c, "Check for updates").Clicked() {
@@ -53,11 +53,11 @@ func drawAbout(rc *api.RenderContext) {
 		})
 
 		ui.Box(c).Height(1).Background(t.Border)
-		ui.Text(c, "Feedback").FontSize(13).Bold()
+		ui.Text(c, "Feedback").FontSize(t.FontSize).Bold()
 		ui.TextArea(c, draft).Placeholder("What happened? Nothing is sent until you save and share it.").Lines(3, 6)
 		if ui.Button(c, "Save draft").Clicked() {
 			if err := rc.App.Run("app.feedback", map[string]any{"text": *draft}); err != nil {
-				ui.Text(c, fmt.Sprint(err)).FontSize(11).TextColor(t.Danger)
+				ui.Text(c, fmt.Sprint(err)).FontSize(t.FontSize - 2).TextColor(t.Danger)
 			}
 		}
 	})

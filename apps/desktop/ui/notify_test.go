@@ -13,7 +13,7 @@ func TestNotifyQueuesAndDrains(t *testing.T) {
 	pending.list = nil
 	pending.mu.Unlock()
 
-	DrainNotifications(nil) // no frame yet: nothing to do, no panic
+	DrainNotifications(nil, false) // no frame yet: nothing to do, no panic
 
 	Notify(api.Notification{})
 	pending.mu.Lock()
@@ -39,7 +39,7 @@ func TestNotifyQueuesAndDrains(t *testing.T) {
 			return
 		}
 		drained = true
-		DrainNotifications(c)
+		DrainNotifications(c, false)
 		pending.mu.Lock()
 		remaining = len(pending.list)
 		pending.mu.Unlock()

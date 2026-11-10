@@ -6,6 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"hiik/icons"
 	"hiik/mods/api"
 )
 
@@ -174,7 +175,7 @@ func renderTabs(rc *api.RenderContext) {
 						return
 					}
 					ui.Text(rc.C, name).
-						FontSize(12.5).
+						FontSize(t.FontSize - 0.5).
 						TextColor(func() ui.Color {
 							if on {
 								return t.Text
@@ -203,17 +204,17 @@ func renderTabs(rc *api.RenderContext) {
 							Label(label)
 					}
 					if on {
-						ui.Text(rc.C, "✕").
-							FontSize(12).
+						close := ui.Icon(rc.C, icons.X).
+							FontSize(t.FontSize-1).
 							TextColor(t.TextMuted).
 							Padding(0, 2).
-							Radius(2).
 							Cursor(ui.CursorPointer).
+							Label("Close tab").
 							Tooltip("Close tab").
-							Description("Close tab").
 							OnClick(func() {
 								_ = rc.App.Run(api.CmdTabClose, sideTabArgs(sp, tb.ID))
 							})
+						close.Description("Close tab")
 					}
 				})
 			})

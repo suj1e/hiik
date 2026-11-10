@@ -331,15 +331,9 @@ func (s *Shell) drawModFloat(c *mui.Context, f *modFloatState, index int) {
 				Gap(6).
 				AlignItems(mui.Center).
 				Children(func() {
-					mui.Text(c, modPanelTitle(f.panelID)).FontSize(11).Bold().SingleLine()
+					mui.Text(c, modPanelTitle(f.panelID)).FontSize(t.FontSize - 2).Bold().SingleLine()
 					mui.Box(c).Grow(1)
-					mui.Text(c, "×").
-						FontSize(14).
-						TextColor(t.TextMuted).
-						Padding(0, 4).
-						Cursor(mui.CursorPointer).
-						Tooltip("Close float").
-						OnClick(func() { CloseModFloat(f.panelID) })
+					closeIconButton(c, "mod/float/close/"+f.panelID, "Close float", func() { CloseModFloat(f.panelID) })
 				})
 			mui.Box(c).Height(1).Background(t.Border)
 			mui.Box(c).Fill().Padding(8, 10).Children(func() {
@@ -419,22 +413,16 @@ func (s *Shell) modWindowFrame(c *mui.Context, w *modWindowState) mui.Element {
 			Gap(8).
 			AlignItems(mui.Center).
 			Children(func() {
-				mui.Text(c, modPanelTitle(w.panelID)).FontSize(12).Bold().SingleLine()
+				mui.Text(c, modPanelTitle(w.panelID)).FontSize(t.FontSize - 1).Bold().SingleLine()
 				mui.Box(c).Grow(1)
 				mui.Text(c, keep).
-					FontSize(10).
+					FontSize(t.FontSize-3).
 					TextColor(t.TextMuted).
 					Padding(0, 6).
 					Cursor(mui.CursorPointer).
 					Tooltip(tip).
 					OnClick(func() { w.keep = !w.keep })
-				mui.Text(c, "×").
-					FontSize(14).
-					TextColor(t.TextMuted).
-					Padding(0, 4).
-					Cursor(mui.CursorPointer).
-					Tooltip("Close window").
-					OnClick(func() { s.removeModWindow(w.panelID) })
+				closeIconButton(c, "mod/window/close/"+w.panelID, "Close window", func() { s.removeModWindow(w.panelID) })
 			})
 		mui.Box(c).Height(1).Background(t.Border)
 		mui.Box(c).Fill().Padding(10, 12).Children(func() {

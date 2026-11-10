@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-11-09.
+Updated 2026-11-10.
 
 ## Works
 
@@ -21,18 +21,26 @@ Updated 2026-11-09.
   editable global keymap and keys.json sections; per-layout themes.
 - Built-in panels: spaces, agents, tabs, pane header, status, files,
   changes, worktrees, peek, settings, about, machines.
+- UI: native Sidebar/Outline/List/Tree/TabsBase bodies, right-side agent
+  disclosure and gold/hollow status marks, native pane grip drag/drop,
+  native SearchField palette, system notifications when away, file/git
+  refresh, one `hiik/keys` table, SVG chrome icons and the real palette
+  chord in the status bar.
 - Files/Changes/Worktrees local and remote; worktree create/open/remove.
 - Mods: Go compile-time panels/commands, mod panes, mod windows with keep,
   floating mod regions.
 - Programs: 143-row table and icons; installed agents detected through the
   login shell; new-tab menu includes omp first.
-- Machines: list/add/connect/rename/rm, SSH-config picker, login guidance,
-  temporary machines hidden, remote E2E test guarded by `HIIK_E2E_MACHINE`.
+- Machines: list/add/connect/rename/rm, OS and architecture detection
+  (`uname -sm`; Windows `ver` and `PROCESSOR_ARCHITECTURE`) in the panel and
+  space headers, SSH-config picker, login guidance, temporary machines
+  hidden, remote E2E test guarded by `HIIK_E2E_MACHINE`.
 - Windows: multi-window, floating inspector, install-update overlay.
 - Updates and telemetry: check, download/open, core update with ownership
   checks, local telemetry audit; What's New.
-- Ops: script tests, icon generator, CI for macOS/Linux/Windows,
-  unsigned release workflow and runtime acceptance step.
+- Ops: script tests, split-pane app icon on the macOS grid (`just icon`),
+  CI for macOS/Linux/Windows, unsigned release workflow and runtime
+  acceptance step.
 - `go test ./...` passes (215 top-level tests plus subtests); `just check`
   green; real-core E2E passes;
   the app launches against an isolated core.

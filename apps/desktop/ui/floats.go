@@ -91,15 +91,9 @@ func (s *Shell) floatingInspector(c *mui.Context) {
 				Gap(8).
 				AlignItems(mui.Center).
 				Children(func() {
-					mui.Text(c, "Inspector").FontSize(12).Bold()
+					mui.Text(c, "Inspector").FontSize(t.FontSize - 1).Bold()
 					mui.Box(c).Grow(1)
-					mui.Text(c, "×").
-						FontSize(14).
-						TextColor(t.TextMuted).
-						Padding(0, 4).
-						Cursor(mui.CursorPointer).
-						Tooltip("Close inspector").
-						OnClick(func() { st.open = false })
+					closeIconButton(c, "shell/inspector/close", "Close inspector", func() { st.open = false })
 				})
 			mui.Box(c).Height(1).Background(t.Border)
 			mui.Column(c).Fill().Padding(10, 12).Gap(2).Children(func() {
@@ -108,7 +102,7 @@ func (s *Shell) floatingInspector(c *mui.Context) {
 				}
 			})
 			mui.Text(c, "drag to move · close to dismiss").
-				FontSize(10).
+				FontSize(t.FontSize-3).
 				TextColor(t.TextMuted).
 				Padding(0, 12, 8, 12)
 		})
@@ -184,7 +178,7 @@ func inspectorRow(c *mui.Context, label, value string) {
 		Gap(8).
 		AlignItems(mui.Center).
 		Children(func() {
-			mui.Text(c, label).FontSize(10).TextColor(t.TextMuted).Width(62)
-			mui.Text(c, value).FontSize(11).SingleLine().TextColor(t.Text)
+			mui.Text(c, label).FontSize(t.FontSize - 3).TextColor(t.TextMuted).Width(62)
+			mui.Text(c, value).FontSize(t.FontSize - 2).SingleLine().TextColor(t.Text)
 		})
 }

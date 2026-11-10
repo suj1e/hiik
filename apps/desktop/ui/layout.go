@@ -396,7 +396,7 @@ func (s *Shell) renderLayoutNode(c *mui.Context, n api.Layout, sp *api.Space, ta
 				s.layoutHeader(c, n.Header, sp, tab)
 			}
 			if chosen == nil {
-				mui.Text(c, "No stack child").FontSize(11).TextColor(c.Theme().TextMuted).Padding(8)
+				mui.Text(c, "No stack child").FontSize(c.Theme().FontSize - 2).TextColor(c.Theme().TextMuted).Padding(8)
 				return
 			}
 			s.renderLayoutNode(c, *chosen, sp, tab, st).Fill()
@@ -508,7 +508,7 @@ func (s *Shell) layoutMod(c *mui.Context, mod string, props map[string]any, sp *
 		return
 	}
 	mui.Column(c).Fill().Center().Padding(12).Children(func() {
-		mui.Text(c, "Panel "+mod+" is not available").FontSize(12).TextColor(t.TextMuted)
+		mui.Text(c, "Panel "+mod+" is not available").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
 
@@ -565,7 +565,7 @@ func (s *Shell) layoutAgent(c *mui.Context, sel string) {
 	}
 	if address == "" {
 		mui.Column(c).Fill().Center().Children(func() {
-			mui.Text(c, "No agent").FontSize(12).TextColor(c.Theme().TextMuted)
+			mui.Text(c, "No agent").FontSize(c.Theme().FontSize - 1).TextColor(c.Theme().TextMuted)
 		})
 		return
 	}
@@ -736,20 +736,14 @@ func (s *Shell) layoutFloat(c *mui.Context, f api.LayoutFloat, bounds mui.Rect, 
 				AlignItems(mui.Center).
 				Background(t.SurfaceHover).
 				Children(func() {
-					mui.Text(c, title).FontSize(11).Bold().SingleLine()
+					mui.Text(c, title).FontSize(t.FontSize - 2).Bold().SingleLine()
 					mui.Box(c).Grow(1)
-					mui.Text(c, "×").
-						FontSize(13).
-						TextColor(t.TextMuted).
-						Padding(0, 4).
-						Cursor(mui.CursorPointer).
-						Tooltip("Close " + title).
-						OnClick(func() {
-							fl := floatLayoutFor(s)
-							fl.mu.Lock()
-							fl.closed[key] = true
-							fl.mu.Unlock()
-						})
+					closeIconButton(c, "shell/float/close/"+key, "Close "+title, func() {
+						fl := floatLayoutFor(s)
+						fl.mu.Lock()
+						fl.closed[key] = true
+						fl.mu.Unlock()
+					})
 				})
 			mui.Box(c).Height(1).Background(t.Border)
 			mui.Box(c).Fill().Children(func() { s.layoutContent(c, f.Content, s.activeSpace(), s.activeTabPtr()) })
@@ -942,7 +936,7 @@ func shortPath(path string) string {
 func (s *Shell) modPaneNotice(c *mui.Context, n *api.Node) {
 	t := c.Theme()
 	mui.Column(c).Fill().Center().Padding(12).Children(func() {
-		mui.Text(c, "Panel "+n.Mod+" is not available").FontSize(12).TextColor(t.TextMuted)
+		mui.Text(c, "Panel "+n.Mod+" is not available").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
 
@@ -1010,15 +1004,15 @@ func (s *Shell) endedTerminal(c *mui.Context, n *api.Node, info api.TerminalInfo
 		title = n.Terminal
 	}
 	mui.Column(c).Fill().Center().Padding(16).Gap(6).Children(func() {
-		mui.Text(c, title).FontSize(12).Bold().SingleLine()
+		mui.Text(c, title).FontSize(t.FontSize - 1).Bold().SingleLine()
 		if info.Cwd != "" {
-			mui.Text(c, info.Cwd).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			mui.Text(c, info.Cwd).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
 		}
 		label := "Terminal ended"
 		if code, ok := terminalExitCode(info, ts); ok {
 			label = fmt.Sprintf("Exited with code %d", code)
 		}
-		mui.Text(c, label).FontSize(11).TextColor(t.TextMuted)
+		mui.Text(c, label).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		mui.Row(c).Gap(8).Children(func() {
 			mui.Button(c, "Restart").OnClick(func() { s.restartTerminal(n, info) })
 			mui.Button(c, "Close").OnClick(func() { s.closeEndedTerminal(n) })
@@ -1143,12 +1137,12 @@ func (s *Shell) helpOverlay(c *mui.Context) {
 	cmds := s.app.Commands()
 	mui.Column(c).Width(600).MaxHeight(560).Gap(10).Children(func() {
 		mui.Row(c).AlignItems(mui.Center).Children(func() {
-			mui.Text(c, "Help").FontSize(15).Bold()
+			mui.Text(c, "Help").FontSize(t.FontSize + 2).Bold()
 			mui.Box(c).Grow(1)
 			mui.Button(c, "Close").OnClick(func() { s.helpOpen = false })
 		})
 		mui.Text(c, s.app.Version()+" · "+s.app.Connection()).
-			FontSize(11).TextColor(t.TextMuted)
+			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		mui.Scroll(c).MaxHeight(460).Children(func() {
 			mui.Column(c).Gap(2).Children(func() {
 				for _, cmd := range cmds {
@@ -1157,18 +1151,18 @@ func (s *Shell) helpOverlay(c *mui.Context) {
 						label = cmd.ID
 					}
 					mui.Row(c).Height(24).Gap(8).AlignItems(mui.Center).Children(func() {
-						mui.Text(c, label).FontSize(12).SingleLine()
+						mui.Text(c, label).FontSize(t.FontSize - 1).SingleLine()
 						mui.Box(c).Grow(1)
-						mui.Text(c, cmd.ID).FontSize(10).TextColor(t.TextMuted)
+						mui.Text(c, cmd.ID).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 					})
 				}
 				if len(cmds) == 0 {
-					mui.Text(c, "No commands").FontSize(12).TextColor(t.TextMuted)
+					mui.Text(c, "No commands").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 				}
 			})
 		})
 		mui.Text(c, "Mod+P opens the palette · Esc closes a dialog").
-			FontSize(10).TextColor(t.TextMuted)
+			FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 	})
 }
 
@@ -1176,9 +1170,9 @@ func (s *Shell) helpOverlay(c *mui.Context) {
 func (s *Shell) welcomeOverlay(c *mui.Context) {
 	t := c.Theme()
 	mui.Column(c).Width(560).Gap(10).Children(func() {
-		mui.Text(c, "Welcome to hiik").FontSize(18).Bold()
+		mui.Text(c, "Welcome to hiik").FontSize(t.FontSize + 5).Bold()
 		mui.Text(c, "One window for spaces, agents and terminals.").
-			FontSize(12).TextColor(t.TextMuted)
+			FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		mui.Column(c).Gap(4).Children(func() {
 			for _, line := range []string{
 				"Mod+P: commands",
@@ -1186,11 +1180,11 @@ func (s *Shell) welcomeOverlay(c *mui.Context) {
 				"Mod+Shift+B: sidebar",
 				"Mod+Shift+I: inspector",
 			} {
-				mui.Text(c, line).FontSize(12)
+				mui.Text(c, line).FontSize(t.FontSize - 1)
 			}
 		})
 		mui.Text(c, "Layouts: "+strings.Join(LayoutNames(), ", ")).
-			FontSize(11).TextColor(t.TextMuted).SingleLine()
+			FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
 		mui.Row(c).Justify(mui.End).Children(func() {
 			mui.Button(c, "Start").OnClick(func() { s.welcomeOpen = false })
 		})
@@ -1206,11 +1200,11 @@ func (s *Shell) installUpdateOverlay(c *mui.Context) {
 		if version != "" {
 			title = "hiik " + version + " is ready"
 		}
-		mui.Text(c, title).FontSize(15).Bold()
+		mui.Text(c, title).FontSize(t.FontSize + 2).Bold()
 		mui.Text(c, "hiik downloaded the package. Install it, then quit hiik.").
-			FontSize(12).TextColor(t.TextMuted)
+			FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		if path != "" {
-			mui.Text(c, path).FontSize(11).SingleLine()
+			mui.Text(c, path).FontSize(t.FontSize - 2).SingleLine()
 		}
 		mui.Row(c).Gap(8).Justify(mui.End).Children(func() {
 			mui.Button(c, "Install").OnClick(func() { s.installPackage() })

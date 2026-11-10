@@ -6,7 +6,7 @@ commands and owns the terminal attachments that are visible.
 ## Regions
 
 ```
-title bar        drag region, app name, connection, palette
+title bar        drag region, sidebar brand, tab strip, system window buttons
 sidebar          spaces (top), agents (bottom), resizable divider
 main             tab strip, split panes, empty state
 status bar       space summary, core state
@@ -16,6 +16,10 @@ overlays         palette, settings, rename, confirm, peek, toast
 `Shell` holds only view state: sidebar width, focused pane, zoomed pane,
 open overlay. Everything else is in `core.App`.
 
+macOS draws its chrome under the traffic lights with `TitleBarHidden`.
+Windows and Linux keep the system title bar and its window buttons; the
+tab strip starts below it.
+
 ## Layout
 
 A tab's tree is `Node`: a leaf with a terminal address, or a binary split
@@ -23,9 +27,27 @@ with `Vertical`, `Ratio`, `A`, `B`. Rendering is recursive `ui.Split` /
 `ui.SplitVertical`; the ratio is the split's `*float32`, so dragging the
 divider mutates the model directly.
 
-A pane is a card: border, radius, theme surface, focus border. The header
-shows the program, title, folder, agent status and split/close buttons.
-The body is `terminal.View`.
+A pane is a card: border, radius, theme surface. A focused pane draws a
+2 DIP accent line along its top edge, not a ring. The header is 26 DIPs and
+shows the program, the folder and the agent status. A terminal title that
+reads as text is muted beside them; the full title is the header's
+tooltip. Split and Close appear while the header is hovered. The body is
+`terminal.View`.
+
+## Sidebar and selection
+
+The sidebar defaults to 228 DIPs. Spaces are `ui.Sidebar` items under
+machine sections, so selection, the keyboard and the focused/unfocused look
+are native; the compact rail is a `ui.List`. The other bodies are native
+too: agents use `ui.Outline` with right-side disclosure controls and
+surface-colored section headers, tabs `ui.TabsBase`, files `ui.Tree`, and
+the changes, worktree and machines panels `ui.List`. Chrome icons come from
+`hiik/icons` and are drawn with `ui.Icon`.
+
+Pane grips use `Element.Drag` and `ui.Drop`; the drop zones ignore input
+while no grip is dragging, so the terminal keeps its clicks. Chords are
+parsed, canonicalized and formatted by `hiik/keys`, one table for the
+keymap, commands and labels.
 
 ## Focus and keys
 
@@ -80,8 +102,8 @@ screens. Reattaching uses the core's first paint.
   own view at ~40 ms.
 - Core metadata events wake the window at most every ~16 ms, once per
   batch.
-- Lists build only visible rows; the sidebar uses `ui.List` once it can
-  scroll.
+- Lists build only visible rows. The spaces sidebar is a `ui.Sidebar` with
+  machine sections; the compact rail is a `ui.List`.
 
 ## Overlays and mods
 

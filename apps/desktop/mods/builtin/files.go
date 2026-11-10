@@ -11,6 +11,7 @@ package builtin
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"hiik/mods/api"
@@ -149,9 +151,9 @@ func builtinPropString(props map[string]any, key string) string {
 func renderBuiltinNotice(c *ui.Context, title, detail string) {
 	t := c.Theme()
 	ui.Column(c).Fill().Center().Gap(5).Padding(16).Children(func() {
-		ui.Text(c, title).FontSize(13).TextColor(t.TextMuted).TextAlign(ui.Center)
+		ui.Text(c, title).FontSize(t.FontSize).TextColor(t.TextMuted).TextAlign(ui.Center)
 		if detail != "" {
-			ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted).TextAlign(ui.Center)
+			ui.Text(c, detail).FontSize(t.FontSize - 2).TextColor(t.TextMuted).TextAlign(ui.Center)
 		}
 	})
 }
@@ -197,12 +199,17 @@ type filesTree struct {
 var (
 	filesMu       sync.Mutex
 	filesByFolder = map[string]*filesTree{}
+	filesWatches  = map[string]context.CancelFunc{}
 )
 
 // resetFilesState clears the cached trees. Tests use it; a refresh in the
 // UI keeps the map so expansion elsewhere is unaffected.
 func resetFilesState() {
 	filesMu.Lock()
+	for _, cancel := range filesWatches {
+		cancel()
+	}
+	filesWatches = map[string]context.CancelFunc{}
 	filesByFolder = map[string]*filesTree{}
 	filesMu.Unlock()
 }
@@ -229,7 +236,101 @@ func filesTreeOnLocked(folder, on string, app api.App) *filesTree {
 	st := &filesTree{folder: folder, on: on, app: app, split: 42}
 	st.reloadLocked()
 	filesByFolder[key] = st
+	filesWatchLocked(st, key)
 	return st
+}
+
+// filesWatchLocked starts mygo's file watch for a local folder once. Remote
+// folders are not watched: the core does not expose a remote watch, and a
+// timer would run a command per frame in the panel. The caller holds
+// filesMu.
+func filesWatchLocked(st *filesTree, key string) {
+	if st.on != "" || !mygo.App.IsReady() {
+		return
+	}
+	if _, ok := filesWatches[key]; ok {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	filesWatches[key] = cancel
+	go func() {
+		w, err := mygo.WatchFiles(ctx, st.folder, mygo.FileWatchOptions{
+			Recursive: true,
+			HintsOnly: true,
+			Ignore: func(p string, isDir bool) bool {
+				if !isDir {
+					return false
+				}
+				switch path.Base(p) {
+				case ".git", "node_modules", "vendor":
+					return true
+				}
+				return false
+			},
+		})
+		if err != nil {
+			return
+		}
+		defer w.Close()
+		for {
+			if _, err := w.Next(ctx); err != nil {
+				return
+			}
+			filesMu.Lock()
+			if cur := filesByFolder[key]; cur != nil {
+				cur.refreshLocked()
+			}
+			filesMu.Unlock()
+			if inv, ok := st.app.(interface{ Invalidate() }); ok {
+				inv.Invalidate()
+			}
+		}
+	}()
+}
+
+// refreshLocked reloads the open folders and keeps expansion and selection
+// where their paths still exist. The caller holds filesMu.
+func (st *filesTree) refreshLocked() {
+	if st.root == nil {
+		return
+	}
+	var walk func(n *fileTreeNode)
+	walk = func(n *fileTreeNode) {
+		if n == nil || !n.dir {
+			return
+		}
+		n.loaded = false
+		n.err = ""
+		if n != st.root && !n.open {
+			return
+		}
+		st.ensureLoadedLocked(n)
+		for _, child := range n.children {
+			walk(child)
+		}
+	}
+	walk(st.root)
+	if st.selected != "" && !filesHasPath(st.root, st.selected) {
+		st.selected = ""
+		st.preview = nil
+		st.previewErr = ""
+	}
+}
+
+// filesHasPath reports whether the tree still shows path.
+func filesHasPath(n *fileTreeNode, target string) bool {
+	if n == nil {
+		return false
+	}
+	if n.path == target {
+		return true
+	}
+	for _, child := range n.children {
+		if filesHasPath(child, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // label names the machine and folder in a header.
@@ -577,8 +678,8 @@ func filesHeader(c *ui.Context, st *filesTree, t *ui.Theme) {
 		BorderWidth(0, 0, 1, 0).
 		BorderColor(t.Border).
 		Children(func() {
-			ui.Text(c, "Files").FontSize(12).Bold()
-			ui.Text(c, st.label()).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).Tooltip(st.label())
+			ui.Text(c, "Files").FontSize(t.FontSize - 1).Bold()
+			ui.Text(c, st.label()).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine().Grow(1).Tooltip(st.label())
 			if ui.Button(c.Key("files/refresh"), "Refresh").Clicked() {
 				st.reloadLocked()
 			}
@@ -588,14 +689,14 @@ func filesHeader(c *ui.Context, st *filesTree, t *ui.Theme) {
 func filesTreeView(c *ui.Context, st *filesTree, t *ui.Theme) {
 	ui.Column(c).Fill().Children(func() {
 		if st.err != "" {
-			ui.Text(c, st.err).FontSize(11).TextColor(t.Danger).Padding(10)
+			ui.Text(c, st.err).FontSize(t.FontSize - 2).TextColor(t.Danger).Padding(10)
 			return
 		}
 		if st.root != nil && st.root.note != "" {
-			ui.Text(c, st.root.note).FontSize(10).TextColor(t.TextMuted).Padding(8, 10)
+			ui.Text(c, st.root.note).FontSize(t.FontSize-3).TextColor(t.TextMuted).Padding(8, 10)
 		}
 		if st.root == nil || len(st.root.children) == 0 {
-			ui.Text(c, "Empty folder").FontSize(11).TextColor(t.TextMuted).Padding(10)
+			ui.Text(c, "Empty folder").FontSize(t.FontSize - 2).TextColor(t.TextMuted).Padding(10)
 			return
 		}
 		ui.Scroll(c).Fill().Padding(4).Children(func() {
@@ -617,14 +718,14 @@ func filesTreeRow(c *ui.Context, st *filesTree, t *ui.Theme, n *fileTreeNode) {
 			}
 			st.ensureLoadedLocked(n)
 			if n.err != "" {
-				ui.Text(c, n.err).FontSize(10).TextColor(t.Danger).PaddingStart(24)
+				ui.Text(c, n.err).FontSize(t.FontSize - 3).TextColor(t.Danger).PaddingStart(24)
 				return
 			}
 			for _, child := range n.children {
 				filesTreeRow(c, st, t, child)
 			}
 			if n.note != "" {
-				ui.Text(c, n.note).FontSize(10).TextColor(t.TextMuted).PaddingStart(24)
+				ui.Text(c, n.note).FontSize(t.FontSize - 3).TextColor(t.TextMuted).PaddingStart(24)
 			}
 		})
 		if n.err != "" {
@@ -671,9 +772,9 @@ func filesPreviewView(c *ui.Context, st *filesTree, t *ui.Theme) {
 				if st.on != "" {
 					name = remoteBase(p.Path)
 				}
-				ui.Text(c, name).FontSize(12).Bold().SingleLine().Grow(1).Tooltip(p.Path)
+				ui.Text(c, name).FontSize(t.FontSize - 1).Bold().SingleLine().Grow(1).Tooltip(p.Path)
 				if p.SizeKnown {
-					ui.Text(c, formatFileSize(p.Size)).FontSize(10).TextColor(t.TextMuted)
+					ui.Text(c, formatFileSize(p.Size)).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 				}
 			})
 		switch {
@@ -689,10 +790,10 @@ func filesPreviewView(c *ui.Context, st *filesTree, t *ui.Theme) {
 
 func filesImagePlaceholder(c *ui.Context, t *ui.Theme, p *filePreview) {
 	ui.Column(c).Fill().Center().Gap(6).Padding(16).Children(func() {
-		ui.Text(c, "Image").FontSize(15).TextColor(t.TextMuted)
-		ui.Text(c, filepath.Base(p.Path)).FontSize(11).TextColor(t.TextMuted).TextAlign(ui.Center)
+		ui.Text(c, "Image").FontSize(t.FontSize + 2).TextColor(t.TextMuted)
+		ui.Text(c, filepath.Base(p.Path)).FontSize(t.FontSize - 2).TextColor(t.TextMuted).TextAlign(ui.Center)
 		if p.SizeKnown {
-			ui.Text(c, formatFileSize(p.Size)).FontSize(10).TextColor(t.TextMuted)
+			ui.Text(c, formatFileSize(p.Size)).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 		}
 	})
 }
@@ -711,7 +812,7 @@ func filesTextPreview(c *ui.Context, t *ui.Theme, p *filePreview) {
 		text += "\n\n… preview truncated"
 	}
 	ui.Scroll(c).Fill().Padding(10).Children(func() {
-		ui.Text(c, text).FontSize(12).Selectable()
+		ui.Text(c, text).FontSize(t.FontSize - 1).Selectable()
 	})
 }
 

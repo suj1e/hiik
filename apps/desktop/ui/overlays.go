@@ -38,9 +38,9 @@ func (s *Shell) about(c *mui.Context) {
 func (s *Shell) whatsNew(c *mui.Context) {
 	t := c.Theme()
 	mui.Column(c).Width(640).Gap(10).Children(func() {
-		mui.Text(c, "What's new").FontSize(15).Bold()
+		mui.Text(c, "What's new").FontSize(t.FontSize + 2).Bold()
 		mui.Scroll(c).MaxHeight(460).Children(func() {
-			mui.Text(c, s.app.ReleaseNotes()).FontSize(12).TextColor(t.TextMuted)
+			mui.Text(c, s.app.ReleaseNotes()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 		mui.Row(c).Justify(mui.End).Children(func() {
 			mui.Button(c, "Done").OnClick(func() { s.whatsNewOpen = false })
@@ -128,8 +128,11 @@ func (s *Shell) restorePaneFocus() {
 func (s *Shell) palette(c *mui.Context) {
 	t := c.Theme()
 	mui.Column(c).Width(560).Gap(8).Children(func() {
-		mui.Text(c, "Commands").FontSize(11).TextColor(t.TextMuted)
-		input := mui.TextInput(c, &s.paletteQuery).AutoFocus()
+		mui.Text(c, "Commands").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+		input := mui.SearchField(c, &s.paletteQuery).
+			AutoFocus().
+			Label("Search commands").
+			Placeholder("Search commands")
 		input.OnShortcut(0, mui.KeyDown, func() { s.paletteMove(1) })
 		input.OnShortcut(0, mui.KeyUp, func() { s.paletteMove(-1) })
 		if input.Changed() {
@@ -175,18 +178,18 @@ func (s *Shell) palette(c *mui.Context) {
 				r.Background(t.SurfaceHover)
 			}
 			r.Children(func() {
-				mui.Text(c, cmd.Title).FontSize(12).SingleLine()
+				mui.Text(c, cmd.Title).FontSize(t.FontSize - 1).SingleLine()
 				mui.Box(c).Grow(1)
-				mui.Text(c, cmd.ID).FontSize(10).TextColor(t.TextMuted)
+				mui.Text(c, cmd.ID).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 			})
 		})
 		if len(cmds) == 0 {
-			mui.Text(c, "No matching commands").FontSize(11).TextColor(t.TextMuted)
+			mui.Text(c, "No matching commands").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		}
 		if input.Submitted() || list.Submitted() {
 			run(s.paletteSel)
 		}
-		mui.Text(c, "↑↓ choose · Enter run · Esc close").FontSize(10).TextColor(t.TextMuted)
+		mui.Text(c, "↑↓ choose · Enter run · Esc close").FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 	})
 }
 
@@ -212,12 +215,12 @@ func (s *Shell) worktree(c *mui.Context) {
 	sp, _ := s.activeTab()
 	mui.Column(c).Width(600).Gap(8).Children(func() {
 		mui.Row(c).AlignItems(mui.Center).Children(func() {
-			mui.Text(c, "Worktrees").FontSize(13).Bold()
+			mui.Text(c, "Worktrees").FontSize(t.FontSize).Bold()
 			mui.Box(c).Grow(1)
 			mui.Button(c, "Close").OnClick(func() { s.worktreeOpen = false })
 		})
 		if sp == nil {
-			mui.Text(c, "No space open.").FontSize(12).TextColor(t.TextMuted)
+			mui.Text(c, "No space open.").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			return
 		}
 		s.renderPanel(c, api.PanelWorktree, map[string]any{
@@ -232,8 +235,8 @@ func (s *Shell) peekView(c *mui.Context, open *bool) {
 	address := s.peek
 	mui.Column(c).Width(760).MaxHeight(600).Gap(8).Children(func() {
 		mui.Row(c).AlignItems(mui.Center).Gap(8).Children(func() {
-			mui.Text(c, "Peek").FontSize(13).Bold()
-			mui.Text(c, address).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			mui.Text(c, "Peek").FontSize(t.FontSize).Bold()
+			mui.Text(c, address).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
 			mui.Box(c).Grow(1)
 			mui.Button(c, "Close").OnClick(func() { *open = false })
 		})
@@ -253,7 +256,7 @@ func (s *Shell) dialogView(c *mui.Context, open *bool) {
 	t := c.Theme()
 	d := s.dialog
 	mui.Column(c).Width(360).Gap(8).Children(func() {
-		mui.Text(c, d.title).FontSize(13).Bold()
+		mui.Text(c, d.title).FontSize(t.FontSize).Bold()
 		switch d.kind {
 		case dialogRename:
 			input := mui.TextInput(c, &s.dialog.value).AutoFocus()
@@ -274,7 +277,7 @@ func (s *Shell) dialogView(c *mui.Context, open *bool) {
 				ok()
 			}
 		case dialogConfirm:
-			mui.Text(c, d.message).FontSize(12).TextColor(t.TextMuted)
+			mui.Text(c, d.message).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			mui.Row(c).Gap(8).Justify(mui.End).Children(func() {
 				mui.Button(c, "Cancel").OnClick(func() { *open = false })
 				mui.Button(c, "Confirm").OnClick(func() {

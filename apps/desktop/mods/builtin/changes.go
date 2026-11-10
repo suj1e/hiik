@@ -9,11 +9,14 @@ package builtin
 // pressed; frames read the cached result under changesMu.
 
 import (
+	"context"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"hiik/mods/api"
@@ -57,15 +60,21 @@ type changesState struct {
 	selection *changeSelection
 	diff      string
 	diffErr   string
+	list      ui.ListState
 }
 
 var (
 	changesMu       sync.Mutex
 	changesByFolder = map[string]*changesState{}
+	changesTimers   = map[string]context.CancelFunc{}
 )
 
 func resetChangesState() {
 	changesMu.Lock()
+	for _, cancel := range changesTimers {
+		cancel()
+	}
+	changesTimers = map[string]context.CancelFunc{}
 	changesByFolder = map[string]*changesState{}
 	changesMu.Unlock()
 }
@@ -86,7 +95,44 @@ func changesStateOnLocked(folder, on string, app api.App) *changesState {
 	st := &changesState{folder: folder, on: on, app: app, split: 38}
 	st.reloadLocked()
 	changesByFolder[key] = st
+	changesTimerLocked(st, key)
 	return st
+}
+
+// changesTimerLocked refreshes git status on a timer once the app runs. The
+// caller holds changesMu.
+func changesTimerLocked(st *changesState, key string) {
+	if !mygo.App.IsReady() {
+		return
+	}
+	if _, ok := changesTimers[key]; ok {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	changesTimers[key] = cancel
+	every := 5 * time.Second
+	if st.on != "" {
+		every = 15 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(every)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				changesMu.Lock()
+				if cur := changesByFolder[key]; cur != nil {
+					cur.reloadLocked()
+				}
+				changesMu.Unlock()
+				if inv, ok := st.app.(interface{ Invalidate() }); ok {
+					inv.Invalidate()
+				}
+			}
+		}
+	}()
 }
 
 // label names the machine and folder in the header.
@@ -95,6 +141,7 @@ func (st *changesState) label() string { return machineLabel(st.on, st.folder) }
 // reloadLocked asks git status and drops a selection that no longer exists.
 // The caller holds changesMu.
 func (st *changesState) reloadLocked() {
+	sel := st.selection
 	var (
 		entries []StatusEntry
 		err     error
@@ -117,6 +164,14 @@ func (st *changesState) reloadLocked() {
 	st.selection = nil
 	st.diff = ""
 	st.diffErr = ""
+	if sel != nil {
+		for _, entry := range entries {
+			if entry.Path == sel.path && changeInGroup(entry, sel.group) {
+				st.selectLocked(entry, sel.group)
+				break
+			}
+		}
+	}
 }
 
 // selectLocked loads the diff for one row. The caller holds changesMu.
@@ -214,12 +269,28 @@ func changesHeader(c *ui.Context, st *changesState, t *ui.Theme) {
 		BorderWidth(0, 0, 1, 0).
 		BorderColor(t.Border).
 		Children(func() {
-			ui.Text(c, "Changes").FontSize(12).Bold()
-			ui.Text(c, st.label()).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).Tooltip(st.label())
+			ui.Text(c, "Changes").FontSize(t.FontSize - 1).Bold()
+			ui.Text(c, st.label()).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine().Grow(1).Tooltip(st.label())
 			if ui.Button(c.Key("changes/refresh"), "Refresh").Clicked() {
 				st.reloadLocked()
 			}
 		})
+}
+
+// changeInGroup reports whether an entry belongs to one of the panel's
+// sections; a path may be both staged and unstaged.
+func changeInGroup(e StatusEntry, group string) bool {
+	switch group {
+	case "staged":
+		return e.Staged()
+	case "unstaged":
+		return e.Unstaged()
+	case "untracked":
+		return e.Untracked()
+	case "conflicted":
+		return e.Conflict()
+	}
+	return false
 }
 
 // changeGroups splits the status into the sections the panel shows.
@@ -251,51 +322,119 @@ func changeGroups(entries []StatusEntry) (staged, unstaged, untracked, conflicte
 	return
 }
 
+// changeListRow is one row of the changes list: a group header or an
+// entry.
+type changeListRow struct {
+	group string
+	title string
+	entry StatusEntry
+}
+
+// changeListRows flattens the status groups into the list.
+func changeListRows(entries []StatusEntry) []changeListRow {
+	staged, unstaged, untracked, conflicted := changeGroups(entries)
+	groups := []struct {
+		title string
+		group string
+		items []StatusEntry
+	}{
+		{"Staged", "staged", staged},
+		{"Unstaged", "unstaged", unstaged},
+		{"Untracked", "untracked", untracked},
+		{"Conflicted", "conflicted", conflicted},
+	}
+	var out []changeListRow
+	for _, group := range groups {
+		if len(group.items) == 0 {
+			continue
+		}
+		out = append(out, changeListRow{group: group.group, title: group.title})
+		for _, entry := range group.items {
+			out = append(out, changeListRow{group: group.group, entry: entry})
+		}
+	}
+	return out
+}
+
 func changesListView(c *ui.Context, st *changesState, t *ui.Theme) {
-	staged, unstaged, untracked, conflicted := changeGroups(st.entries)
-	if len(staged)+len(unstaged)+len(untracked)+len(conflicted) == 0 {
+	rows := changeListRows(st.entries)
+	if len(rows) == 0 {
 		renderBuiltinNotice(c, "No changes", "The working tree is clean.")
 		return
 	}
-	ui.Scroll(c).Fill().Padding(4).Children(func() {
-		ui.Column(c).Gap(6).Children(func() {
-			changesGroup(c, st, t, "Staged", "staged", staged)
-			changesGroup(c, st, t, "Unstaged", "unstaged", unstaged)
-			changesGroup(c, st, t, "Untracked", "untracked", untracked)
-			changesGroup(c, st, t, "Conflicted", "conflicted", conflicted)
-		})
-	})
+	selected := -1
+	for i, row := range rows {
+		if row.title != "" || st.selection == nil {
+			continue
+		}
+		if row.group == st.selection.group && row.entry.Path == st.selection.path {
+			selected = i
+			break
+		}
+	}
+	state := &st.list
+	state.Key = func(i int) any {
+		row := rows[i]
+		if row.title != "" {
+			return "header:" + row.group
+		}
+		return row.group + "\x00" + row.entry.Path
+	}
+	state.Header = func(i int) bool { return rows[i].title != "" }
+	state.Label = func(i int) string {
+		if rows[i].title != "" {
+			return rows[i].title
+		}
+		return rows[i].entry.Path
+	}
+	state.Selected = &selected
+	list := ui.List(c, state, len(rows), func(i int) {
+		row := rows[i]
+		if row.title != "" {
+			ui.Textf(c, "%s (%d)", row.title, changeGroupCount(rows, row.group)).
+				FontSize(t.FontSize-3).
+				TextColor(t.TextMuted).
+				Padding(4, 8).
+				Background(t.Background)
+			return
+		}
+		changesEntryRow(c, row.entry, row.group, t)
+	}).Fill()
+	list.Padding(4)
+	if list.Changed() && selected >= 0 && selected < len(rows) && rows[selected].title == "" {
+		row := rows[selected]
+		st.selectLocked(row.entry, row.group)
+	}
 }
 
-func changesGroup(c *ui.Context, st *changesState, t *ui.Theme, title, group string, entries []StatusEntry) {
-	if len(entries) == 0 {
-		return
+// changeGroupCount counts the entries of one group in the flattened rows.
+func changeGroupCount(rows []changeListRow, group string) int {
+	n := 0
+	for _, row := range rows {
+		if row.group == group && row.title == "" {
+			n++
+		}
 	}
-	ui.Textf(c, "%s (%d)", title, len(entries)).FontSize(10).TextColor(t.TextMuted).Padding(4, 8)
-	for _, e := range entries {
-		entry := e
-		key := "changes:" + group + ":" + entry.Path
-		row := ui.Row(c.Key(key)).
-			Height(24).
-			Padding(0, 8).
-			Gap(8).
-			AlignItems(ui.Center).
-			Radius(4)
-		row.Children(func() {
-			ui.Text(c, entry.Code()).FontSize(10).TextColor(t.TextMuted).Width(22).SingleLine()
-			name := entry.Path
-			if entry.OrigPath != "" {
-				name = filepath.Base(entry.OrigPath) + " → " + name
+	return n
+}
+
+// changesEntryRow draws one path of the changes list.
+func changesEntryRow(c *ui.Context, entry StatusEntry, group string, t *ui.Theme) {
+	name := entry.Path
+	if entry.OrigPath != "" {
+		name = filepath.Base(entry.OrigPath) + " → " + name
+	}
+	ui.Row(c).
+		Gap(6).
+		Padding(2, 8).
+		AlignItems(ui.Center).
+		Children(func() {
+			ui.Text(c, entry.Code()).FontSize(t.FontSize - 3).TextColor(t.TextMuted).Width(22).SingleLine()
+			ui.Text(c, name).FontSize(t.FontSize - 1).SingleLine().Grow(1).Tooltip(entry.Path)
+			if group == "untracked" {
+				ui.Text(c, "new").FontSize(t.FontSize - 4).TextColor(t.Success)
 			}
-			ui.Text(c, name).FontSize(12).SingleLine().Grow(1).Tooltip(entry.Path)
 		})
-		if row.Clicked() {
-			st.selectLocked(entry, group)
-		}
-		if st.selection != nil && st.selection.key() == key {
-			row.Background(t.SurfaceHover)
-		}
-	}
 }
 
 func changesDiffView(c *ui.Context, st *changesState, t *ui.Theme) {
@@ -313,8 +452,8 @@ func changesDiffView(c *ui.Context, st *changesState, t *ui.Theme) {
 			BorderWidth(0, 0, 1, 0).
 			BorderColor(t.Border).
 			Children(func() {
-				ui.Text(c, filepath.Base(sel.path)).FontSize(12).Bold().SingleLine().Grow(1).Tooltip(sel.path)
-				ui.Text(c, sel.group).FontSize(10).TextColor(t.TextMuted)
+				ui.Text(c, filepath.Base(sel.path)).FontSize(t.FontSize - 1).Bold().SingleLine().Grow(1).Tooltip(sel.path)
+				ui.Text(c, sel.group).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 			})
 		if st.diffErr != "" {
 			renderBuiltinNotice(c, "Cannot show the diff", st.diffErr)
@@ -329,7 +468,7 @@ func changesDiffView(c *ui.Context, st *changesState, t *ui.Theme) {
 			text = strings.ToValidUTF8(text[:changesMaxDisplayBytes], "") + "\n… diff truncated"
 		}
 		ui.ScrollBoth(c).Fill().Padding(8).Children(func() {
-			ui.Text(c, text).FontSize(11).Selectable()
+			ui.Text(c, text).FontSize(t.FontSize - 2).Selectable()
 		})
 	})
 }

@@ -97,6 +97,17 @@ func TestStatusShowsThePaletteBinding(t *testing.T) {
 	}
 }
 
+func TestStatusShowsTheDefaultPaletteBinding(t *testing.T) {
+	app := terminalsLayoutApp()
+	app.settings["layout"] = "herdr"
+	_, tt := newTestShell(app)
+	tt.Frame()
+	want := api.FormatChord("Mod+P") + "  commands"
+	if !tt.HasText(want) {
+		t.Fatalf("the status bar does not show the default palette key %q: %v", want, tt.Texts())
+	}
+}
+
 func TestStatusOffersCommandsWithoutAPaletteBinding(t *testing.T) {
 	app := terminalsLayoutApp()
 	app.settings["layout"] = "herdr"
@@ -128,7 +139,7 @@ func TestHerdrTabsShowStatusAndOneClose(t *testing.T) {
 	}
 	closes := 0
 	for _, text := range tt.Texts() {
-		if text == "✕" {
+		if text == "Close tab" {
 			closes++
 		}
 	}

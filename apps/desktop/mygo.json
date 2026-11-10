@@ -6,5 +6,8 @@
   "copyright": "Copyright © 2026 suj1e",
   "license": "MIT",
   "out": "dist",
-  "macos": { "minimumSystemVersion": "13.0" }
+  "macos": {
+    "minimumSystemVersion": "13.0"
+  },
+  "icon": "resources/icon.png"
 }

@@ -10,9 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	mui "github.com/egoist/mygo/ui"
-
 	"hiik/core/store"
+	"hiik/keys"
 	"hiik/mods/api"
 )
 
@@ -51,11 +50,11 @@ func (a *App) Keymap() []api.KeyBinding {
 		// them and report each bad chord once.
 		clean := make(map[string]string, len(settings))
 		for command, raw := range settings {
-			if isUnboundChord(raw) {
+			if keys.Unbound(raw) {
 				clean[command] = ""
 				continue
 			}
-			chord, ok := canonicalChord(raw)
+			chord, ok := keys.Canonical(raw)
 			if !ok {
 				problems = append(problems, "settings.keys."+command+": "+raw+" is not a key")
 				clean[command] = ""
@@ -81,7 +80,7 @@ func (a *App) Keymap() []api.KeyBinding {
 			binding.Explicit = true
 			if chord == "" {
 				binding.Chord = ""
-			} else if _, ok := canonicalChord(chord); ok {
+			} else if _, ok := keys.Canonical(chord); ok {
 				binding.Chord = chord
 			}
 		}
@@ -371,7 +370,7 @@ func parseKeysSection(out map[string]string, problems *[]string, section string,
 			action, chord = key, text
 		case looksLikeChord(key):
 			action, chord = text, key
-		case isUnboundChord(text) && looksLikeCommand(key):
+		case keys.Unbound(text) && looksLikeCommand(key):
 			action, chord = key, text
 		default:
 			*problems = append(*problems,
@@ -388,25 +387,16 @@ func storeSectionChord(out map[string]string, problems *[]string, section, actio
 	if action == "" {
 		return
 	}
-	if isUnboundChord(raw) {
+	if keys.Unbound(raw) {
 		out[action] = ""
 		return
 	}
-	chord, ok := canonicalChord(raw)
+	chord, ok := keys.Canonical(raw)
 	if !ok {
 		*problems = append(*problems, "keys.json."+section+"."+action+": "+raw+" is not a key")
 		return
 	}
 	out[action] = chord
-}
-
-// isUnboundChord reports whether a value leaves a command without a key.
-func isUnboundChord(chord string) bool {
-	switch strings.ToLower(strings.TrimSpace(chord)) {
-	case "", "none", "unbound", "-":
-		return true
-	}
-	return false
 }
 
 // looksLikeCommand reports whether s names a command rather than a chord.
@@ -424,197 +414,11 @@ func looksLikeCommand(s string) bool {
 
 // looksLikeChord reports whether s parses as a chord.
 func looksLikeChord(s string) bool {
-	_, ok := canonicalChord(s)
+	_, ok := keys.Canonical(s)
 	return ok
 }
 
 // bindingChord formats a shipped binding as a canonical chord.
 func bindingChord(b api.Binding) string {
-	var parts []string
-	if b.Mods&mui.Super != 0 {
-		parts = append(parts, "Cmd")
-	}
-	if b.Mods&mui.Ctrl != 0 {
-		parts = append(parts, "Ctrl")
-	}
-	if b.Mods&mui.Alt != 0 {
-		parts = append(parts, "Alt")
-	}
-	if b.Mods&mui.Shift != 0 {
-		parts = append(parts, "Shift")
-	}
-	name, ok := keyChordNames[b.Key]
-	if !ok {
-		return ""
-	}
-	return strings.Join(append(parts, name), "+")
+	return keys.FromBinding(b.Mods, b.Key)
 }
-
-// canonicalChord parses a chord in either spelling, "Mod+Shift+K" or the
-// reference's "cmd-shift-k", and returns one canonical form. It reports
-// whether every part names a modifier or key.
-func canonicalChord(raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", false
-	}
-	// Try "+" first, then the hyphen spelling; "ctrl-+" is the plus key in
-	// the hyphen spelling, so a failed first try must not be final.
-	for _, sep := range []string{"+", "-"} {
-		if sep == "-" && !strings.Contains(raw, "-") {
-			continue
-		}
-		mods, key, ok := splitChord(raw, sep)
-		if !ok {
-			continue
-		}
-		name, ok := keyChordNames[key]
-		if !ok {
-			continue
-		}
-		var names []string
-		for _, mod := range mods {
-			if n, ok := chordModifierNames[mod]; ok {
-				names = append(names, n)
-			}
-		}
-		return strings.Join(append(names, name), "+"), true
-	}
-	return "", false
-}
-
-// splitChord splits raw on sep and reads the modifiers and last key.
-func splitChord(raw, sep string) ([]string, mui.Key, bool) {
-	parts := strings.Split(strings.ToLower(raw), sep)
-	// A trailing empty part is the separator's own key: "Mod++" and
-	// "ctrl--" bind the plus and minus keys.
-	if sep == "+" && len(parts) >= 2 && parts[len(parts)-1] == "" {
-		parts[len(parts)-1] = "+"
-		if len(parts) >= 3 && parts[len(parts)-2] == "" {
-			parts = append(parts[:len(parts)-2], parts[len(parts)-1])
-		}
-	}
-	if sep == "-" && len(parts) >= 2 && parts[len(parts)-1] == "" {
-		parts[len(parts)-1] = "-"
-		if len(parts) >= 3 && parts[len(parts)-2] == "" {
-			parts = append(parts[:len(parts)-2], parts[len(parts)-1])
-		}
-	}
-	if len(parts) == 0 || strings.TrimSpace(parts[len(parts)-1]) == "" {
-		return nil, 0, false
-	}
-	keyName := strings.TrimSpace(parts[len(parts)-1])
-	key, ok := chordKeyNames[keyName]
-	if !ok {
-		return nil, 0, false
-	}
-	mods := make([]string, 0, len(parts)-1)
-	for _, part := range parts[:len(parts)-1] {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			return nil, 0, false
-		}
-		if _, ok := chordModifierNames[part]; !ok {
-			return nil, 0, false
-		}
-		mods = append(mods, part)
-	}
-	return mods, key, true
-}
-
-// chordModifierNames maps a modifier spelling to its display name.
-var chordModifierNames = map[string]string{
-	"mod": "Mod", "cmd": "Cmd", "command": "Cmd", "super": "Cmd", "meta": "Cmd",
-	"ctrl": "Ctrl", "control": "Ctrl",
-	"alt": "Alt", "opt": "Alt", "option": "Alt",
-	"shift": "Shift",
-}
-
-// chordKeyNames maps key spellings to their keys.
-var chordKeyNames = func() map[string]mui.Key {
-	m := map[string]mui.Key{
-		"enter": mui.KeyEnter, "return": mui.KeyEnter,
-		"esc": mui.KeyEscape, "escape": mui.KeyEscape,
-		"tab": mui.KeyTab, "space": mui.KeySpace,
-		"backspace": mui.KeyBackspace, "delete": mui.KeyDelete, "insert": mui.KeyInsert,
-		"home": mui.KeyHome, "end": mui.KeyEnd,
-		"pageup": mui.KeyPageUp, "pagedown": mui.KeyPageDown,
-		"left": mui.KeyLeft, "right": mui.KeyRight, "up": mui.KeyUp, "down": mui.KeyDown,
-		"comma": mui.KeyComma, ",": mui.KeyComma,
-		"period": mui.KeyPeriod, ".": mui.KeyPeriod,
-		"slash": mui.KeySlash, "/": mui.KeySlash,
-		"backslash": mui.KeyBackslash, "\\": mui.KeyBackslash,
-		"semicolon": mui.KeySemicolon, ";": mui.KeySemicolon,
-		"quote": mui.KeyQuote, "'": mui.KeyQuote,
-		"minus": mui.KeyMinus, "-": mui.KeyMinus,
-		"equal": mui.KeyEqual, "=": mui.KeyEqual,
-		"backquote": mui.KeyBackquote, "`": mui.KeyBackquote,
-		"bracketleft": mui.KeyBracketLeft, "[": mui.KeyBracketLeft,
-		"bracketright": mui.KeyBracketRight, "]": mui.KeyBracketRight,
-		"+": mui.KeyEqual, // the plus key shares its code with '='; the chord keeps its name below.
-	}
-	for r := 'a'; r <= 'z'; r++ {
-		m[string(r)] = letterChordKeys[r]
-	}
-	for i, key := range digitChordKeys {
-		m[string(rune('0'+i))] = key
-	}
-	for i, key := range functionChordKeys {
-		m["f"+strconv.Itoa(i+1)] = key
-	}
-	return m
-}()
-
-var letterChordKeys = map[rune]mui.Key{
-	'a': mui.KeyA, 'b': mui.KeyB, 'c': mui.KeyC, 'd': mui.KeyD,
-	'e': mui.KeyE, 'f': mui.KeyF, 'g': mui.KeyG, 'h': mui.KeyH,
-	'i': mui.KeyI, 'j': mui.KeyJ, 'k': mui.KeyK, 'l': mui.KeyL,
-	'm': mui.KeyM, 'n': mui.KeyN, 'o': mui.KeyO, 'p': mui.KeyP,
-	'q': mui.KeyQ, 'r': mui.KeyR, 's': mui.KeyS, 't': mui.KeyT,
-	'u': mui.KeyU, 'v': mui.KeyV, 'w': mui.KeyW, 'x': mui.KeyX,
-	'y': mui.KeyY, 'z': mui.KeyZ,
-}
-
-var digitChordKeys = [...]mui.Key{
-	mui.Key0, mui.Key1, mui.Key2, mui.Key3, mui.Key4,
-	mui.Key5, mui.Key6, mui.Key7, mui.Key8, mui.Key9,
-}
-
-var functionChordKeys = [...]mui.Key{
-	mui.KeyF1, mui.KeyF2, mui.KeyF3, mui.KeyF4, mui.KeyF5, mui.KeyF6,
-	mui.KeyF7, mui.KeyF8, mui.KeyF9, mui.KeyF10, mui.KeyF11, mui.KeyF12,
-}
-
-// keyChordNames is the display name of each key for a chord.
-var keyChordNames = func() map[mui.Key]string {
-	m := make(map[mui.Key]string, len(chordKeyNames))
-	for name, key := range chordKeyNames {
-		if len(name) == 1 {
-			continue
-		}
-		if _, exists := m[key]; !exists {
-			m[key] = strings.ToUpper(name[:1]) + name[1:]
-		}
-	}
-	for r := 'a'; r <= 'z'; r++ {
-		m[letterChordKeys[r]] = strings.ToUpper(string(r))
-	}
-	for i, key := range digitChordKeys {
-		m[key] = string(rune('0' + i))
-	}
-	for i, key := range functionChordKeys {
-		m[key] = "F" + strconv.Itoa(i+1)
-	}
-	m[mui.KeyEqual] = "="
-	m[mui.KeyMinus] = "-"
-	m[mui.KeyComma] = ","
-	m[mui.KeyPeriod] = "."
-	m[mui.KeySlash] = "/"
-	m[mui.KeyBackslash] = "\\"
-	m[mui.KeySemicolon] = ";"
-	m[mui.KeyQuote] = "'"
-	m[mui.KeyBackquote] = "`"
-	m[mui.KeyBracketLeft] = "["
-	m[mui.KeyBracketRight] = "]"
-	return m
-}()

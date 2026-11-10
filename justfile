@@ -1,4 +1,5 @@
-set shell := ["bash", "-c"]
+# Just uses the platform's sh (Git Bash on Windows); every recipe below is
+# POSIX shell, so no shell override is needed.
 
 # Fetch the modules pinned in go.mod. A local mygo checkout is not linked.
 setup:

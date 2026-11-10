@@ -75,7 +75,7 @@ func modPanelTitle(panelID string) string {
 func modPanelNotice(c *mui.Context, text string) {
 	t := c.Theme()
 	mui.Column(c).Fill().Center().Padding(12).Children(func() {
-		mui.Text(c, text).FontSize(12).TextColor(t.TextMuted).SingleLine()
+		mui.Text(c, text).FontSize(t.FontSize - 1).TextColor(t.TextMuted).SingleLine()
 	})
 }
 

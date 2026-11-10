@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 
 	"github.com/egoist/mygo"
@@ -29,17 +30,14 @@ func init() {
 }
 
 // runWindowHook runs once per frame: it consumes window requests a command
-// queued, binds the new-window shortcut, draws the title-bar button and
-// reconciles the local telemetry audit with the setting.
+// queued, binds the new-window shortcut and reconciles the local telemetry
+// audit with the setting.
 func runWindowHook(s *Shell, c *mui.Context) {
 	if s == nil || s.app == nil {
 		return
 	}
 	s.consumeWindowRequests()
 	s.registerWindowShortcuts(c)
-	if !s.overlayOpen() {
-		s.newWindowButton(c)
-	}
 	syncTelemetry(s)
 }
 
@@ -85,30 +83,6 @@ func (s *Shell) registerWindowShortcuts(c *mui.Context) {
 	}
 }
 
-// newWindowButton draws a small "+" in the title bar. It is an overlay
-// because the shell's title bar is built in shell.go; the hook keeps the
-// window code here and leaves the palette shortcut next to it.
-func (s *Shell) newWindowButton(c *mui.Context) {
-	t := c.Theme()
-	mui.Overlay(c, func() {
-		mui.Row(c).
-			Absolute().
-			Top(9).
-			Right(54).
-			Width(22).
-			Height(20).
-			Radius(t.Radius).
-			AlignItems(mui.Center).
-			Justify(mui.Center).
-			Cursor(mui.CursorPointer).
-			Tooltip("New window").
-			OnClick(s.openAnotherWindow).
-			Children(func() {
-				mui.Text(c, "+").FontSize(14).TextColor(t.TextMuted)
-			})
-	})
-}
-
 // openAnotherWindow opens a new window on the same app model without
 // blocking the frame that asked for it. Each window gets its own Shell and
 // its own window state key, so geometry and attachments do not collide.
@@ -129,18 +103,21 @@ func openWindow(app App) {
 
 	ns := New(app)
 	offset := (n % 8) * windowStep
-	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:         "hiik",
-		Width:         1180,
-		Height:        760,
-		X:             40 + offset,
-		Y:             40 + offset,
-		MinWidth:      820,
-		MinHeight:     520,
-		StateKey:      fmt.Sprintf("window-%d", n),
-		TitleBarStyle: mygo.TitleBarHidden,
-		Content:       mui.View(ns.View),
-	})
+	opts := mygo.WindowOptions{
+		Title:     "hiik",
+		Width:     1180,
+		Height:    760,
+		X:         40 + offset,
+		Y:         40 + offset,
+		MinWidth:  820,
+		MinHeight: 520,
+		StateKey:  fmt.Sprintf("window-%d", n),
+		Content:   mui.View(ns.View),
+	}
+	if runtime.GOOS == "darwin" {
+		opts.TitleBarStyle = mygo.TitleBarHidden
+	}
+	win := mygo.NewWindow(opts)
 	ns.win = win
 	win.OnClosed(ns.Close)
 }

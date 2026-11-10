@@ -14,6 +14,12 @@ type Machine struct {
 	Error string `json:"error,omitempty"`
 	// Temporary marks a short-lived machine, such as a task's sandbox.
 	Temporary bool `json:"temporary,omitempty"`
+	// OS is the machine's operating system, when the app could detect it:
+	// "macOS", "Linux", "Windows" or a kernel name.
+	OS string `json:"os,omitempty"`
+	// Arch is the machine's CPU architecture, when detected: "arm64",
+	// "amd64" or a kernel name.
+	Arch string `json:"arch,omitempty"`
 }
 
 // Panel and command IDs for machines.

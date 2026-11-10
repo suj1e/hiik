@@ -131,11 +131,11 @@ func TestBuiltinPeekCommandsUseAddress(t *testing.T) {
 	if len(app.ran) != 1 || app.ran[0] != peekKeepCommand {
 		t.Fatalf("ran = %v, want %s", app.ran, peekKeepCommand)
 	}
-	if got := app.args[0]["address"]; got != "t3" {
-		t.Errorf("address = %v, want t3", got)
+	if got := app.args[0]["terminal"]; got != "t3" {
+		t.Errorf("terminal = %v, want t3", got)
 	}
-	if got := app.args[0]["keep"]; got != true {
-		t.Errorf("keep = %v, want true", got)
+	if got := app.args[0]["place"]; got != "tab" {
+		t.Errorf("place = %v, want tab", got)
 	}
 
 	runPeekCommand(rc, "t3", api.CmdPaneClose, false)

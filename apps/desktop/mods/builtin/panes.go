@@ -3,13 +3,16 @@ package builtin
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 
+	"hiik/icons"
 	"hiik/mods/api"
+	"hiik/resources"
 )
 
 func init() {
@@ -96,64 +99,112 @@ func renderPaneHead(rc *api.RenderContext) {
 		title = "Terminal"
 	}
 
-	ui.Row(rc.C).
+	hovered, _ := rc.Props["hovered"].(bool)
+
+	header := ui.Row(rc.C).
 		FillWidth().
-		Gap(8).
-		AlignItems(ui.Center).
-		Children(func() {
-			if known {
-				sideProgramBadge(rc.C, t, program, hasProgram, agent.Status)
+		Gap(t.Space(1.5)).
+		AlignItems(ui.Center)
+	if title != "" {
+		header.Tooltip(title)
+	}
+	header.Children(func() {
+		if known {
+			sideProgramBadge(rc.C, t, program, hasProgram, agent.Status)
+			label := app
+			if label == "" && hasProgram {
+				label = program.Name
 			}
-			ui.Text(rc.C, title).FontSize(t.FontSize - 1).Bold().SingleLine()
-			if known && app != "" && app != title {
-				ui.Text(rc.C, app).
-					FontSize(t.FontSize - 2).
-					TextColor(t.TextMuted).
+			if label != "" && label != title {
+				ui.Text(rc.C, label).
+					FontSize(t.FontSize - 1).
+					TextColor(t.Text).
 					SingleLine()
 			}
-			if cwd != "" {
-				ui.Text(rc.C, cwd).
+			if clean := paneTitleText(title); clean != "" && clean != label {
+				ui.Text(rc.C, clean).
 					FontSize(t.FontSize - 2).
 					TextColor(t.TextMuted).
 					SingleLine().
-					Shrink(1)
+					Shrink(1).
+					MaxWidth(t.Rem(16))
 			}
-			ui.Box(rc.C).Grow(1)
-			ui.ButtonBase(rc.C).
+		} else {
+			ui.Text(rc.C, title).
+				FontSize(t.FontSize - 1).
+				TextColor(t.TextMuted).
+				SingleLine().
+				Shrink(1).
+				MaxWidth(t.Rem(16))
+		}
+		if cwd != "" {
+			ui.Text(rc.C, cwd).
+				FontSize(t.FontSize - 2).
+				TextColor(t.TextMuted).
+				SingleLine().
+				Shrink(1).
+				Tooltip(cwd)
+		}
+		ui.Box(rc.C).Grow(1)
+		if !hovered {
+			return
+		}
+		ui.Toolbar(rc.C, func() {
+			split := ui.ButtonBase(rc.C).
 				Key("mods/panes/split/"+terminal).
-				Height(20).
-				Padding(0, 6).
+				Height(t.Space(5)).
+				Padding(0, t.Space(1.5)).
 				Radius(t.Radius).
 				Label("Split pane").
-				Tooltip("Split pane").
-				OnClick(func() {
-					args := map[string]any{"direction": "right"}
-					if pane != "" {
-						args["pane"] = pane
-					}
-					_ = rc.App.Run(api.CmdPaneSplit, args)
-				}).
-				Children(func() {
-					ui.Text(rc.C, "Split").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-				})
-			ui.ButtonBase(rc.C).
+				Tooltip("Split pane")
+			split.Children(func() {
+				ui.Text(rc.C, "Split").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+			})
+			split.OnClick(func() {
+				args := map[string]any{"direction": "right"}
+				if pane != "" {
+					args["pane"] = pane
+				}
+				_ = rc.App.Run(api.CmdPaneSplit, args)
+			})
+			close := ui.ButtonBase(rc.C).
 				Key("mods/panes/close/"+terminal).
-				Height(20).
-				Padding(0, 6).
+				Height(t.Space(5)).
+				Padding(0, t.Space(1.5)).
 				Radius(t.Radius).
 				Label("Close pane").
-				Tooltip("Close pane").
-				OnClick(func() {
-					var args map[string]any
-					if pane != "" {
-						args = map[string]any{"pane": pane}
-					}
-					_ = rc.App.Run(api.CmdPaneClose, args)
-				}).
-				Children(func() {
-					ui.Text(rc.C, "Close").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-				})
-		})
+				Tooltip("Close pane")
+			close.Children(func() {
+				ui.Text(rc.C, "Close").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+			})
+			close.OnClick(func() {
+				var args map[string]any
+				if pane != "" {
+					args = map[string]any{"pane": pane}
+				}
+				_ = rc.App.Run(api.CmdPaneClose, args)
+			})
+		}).Label("Pane actions")
+	})
+}
+
+// paneTitleText is the terminal title if it starts with something a person
+// reads: an ASCII letter or digit, or a Han character. A program that
+// prefixes its title with status glyphs keeps the full title in the header
+// tooltip instead.
+func paneTitleText(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return ""
+	}
+	r, _ := utf8.DecodeRuneInString(title)
+	switch {
+	case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		return title
+	case unicode.Is(unicode.Han, r):
+		return title
+	}
+	return ""
 }
 
 // sideProgramFor finds the program row for a known agent, by its core app
@@ -195,10 +246,14 @@ func sideProgramBadge(c *ui.Context, t *ui.Theme, program api.Program, hasProgra
 		svg = sideIconSVG(program.Icon)
 	}
 	if svg == nil {
-		ui.Box(c).
-			Size(6, 6).
-			Radius(3).
-			Background(sideStatusColor(t, status))
+		tile := ui.Box(c).
+			Size(18, 18).
+			Radius(4).
+			Background(t.Surface).
+			Center()
+		tile.Children(func() {
+			ui.Icon(c, icons.Terminal).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
 		return
 	}
 
@@ -245,35 +300,43 @@ var sideIconSVG = func() func(string) *ui.SVG {
 	cache := map[string]*ui.SVG{}
 	failed := map[string]bool{}
 	return func(name string) *ui.SVG {
-		path := sideIconPath(name)
-		if path == "" {
+		name = strings.TrimSpace(name)
+		if name == "" {
 			return nil
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		if svg, ok := cache[path]; ok {
+		if svg, ok := cache[name]; ok {
 			return svg
 		}
-		if failed[path] {
+		if failed[name] {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		data, err := resources.Icons.ReadFile(name)
 		if err != nil {
-			failed[path] = true
+			path := sideIconPath(name)
+			if path == "" {
+				failed[name] = true
+				return nil
+			}
+			data, err = os.ReadFile(path)
+		}
+		if err != nil {
+			failed[name] = true
 			return nil
 		}
 		svg, err := ui.ParseSVG(data)
 		if err != nil {
-			failed[path] = true
+			failed[name] = true
 			return nil
 		}
-		cache[path] = svg
+		cache[name] = svg
 		return svg
 	}
 }()
 
-// sideIconPath finds the icon file for a table entry: an absolute path, the
-// person's HIIK_HOME, the app's resources, or the source tree while testing.
+// sideIconPath finds a user icon: an absolute path or one under HIIK_HOME.
+// The shipped marks are embedded in resources.Icons instead.
 func sideIconPath(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -285,36 +348,15 @@ func sideIconPath(name string) string {
 		}
 		return ""
 	}
-	for _, root := range sideResourceRoots() {
-		if root == "" {
-			continue
-		}
-		path := filepath.Join(root, name)
-		if sideIsFile(path) {
-			return path
-		}
+	home := os.Getenv("HIIK_HOME")
+	if home == "" {
+		return ""
+	}
+	path := filepath.Join(home, name)
+	if sideIsFile(path) {
+		return path
 	}
 	return ""
-}
-
-// sideResourceRoots lists where a resource-relative icon may live, best
-// first. The shipped icons are in apps/desktop/resources/icons.
-func sideResourceRoots() []string {
-	var roots []string
-	if home := os.Getenv("HIIK_HOME"); home != "" {
-		roots = append(roots, home)
-	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		roots = append(roots, dir, filepath.Join(dir, "..", "Resources"))
-	}
-	if wd, err := os.Getwd(); err == nil {
-		roots = append(roots, filepath.Join(wd, "resources"), wd)
-	}
-	if _, file, _, ok := runtime.Caller(0); ok {
-		roots = append(roots, filepath.Join(filepath.Dir(file), "..", "..", "resources"))
-	}
-	return roots
 }
 
 // sideIsFile reports whether path is a regular file.

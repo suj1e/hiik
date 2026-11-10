@@ -6,8 +6,12 @@ package builtin
 import (
 	"fmt"
 	"path"
+	"runtime"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
+
+	"hiik/icons"
 	"hiik/mods/api"
 )
 
@@ -128,7 +132,10 @@ type spaceMachineGroup struct {
 	Machine string
 	Label   string
 	State   string
-	Spaces  []spaceRow
+	// OS and Arch describe the machine; the local group knows its own.
+	OS     string
+	Arch   string
+	Spaces []spaceRow
 }
 
 // spaceMachineGroups groups rows by machine. It reports whether headers
@@ -165,7 +172,13 @@ func spaceMachineGroups(rows []spaceRow, machines []api.Machine) ([]spaceMachine
 	groups := make([]spaceMachineGroup, 0, len(order))
 	index := make(map[string]int, len(order))
 	for _, name := range order {
-		g := spaceMachineGroup{Machine: name, Label: "This computer", State: "ready"}
+		g := spaceMachineGroup{
+			Machine: name,
+			Label:   "This computer",
+			State:   "ready",
+			OS:      localOSName(),
+			Arch:    runtime.GOARCH,
+		}
 		if name != "" {
 			grouped = true
 			m := byName[name]
@@ -177,6 +190,8 @@ func spaceMachineGroups(rows []spaceRow, machines []api.Machine) ([]spaceMachine
 				g.Label = name
 			}
 			g.State = m.State
+			g.OS = m.OS
+			g.Arch = m.Arch
 		}
 		index[name] = len(groups)
 		groups = append(groups, g)
@@ -192,20 +207,26 @@ func spaceMachineGroups(rows []spaceRow, machines []api.Machine) ([]spaceMachine
 	return groups, true
 }
 
-// spaceMachineGlyph is a monitor for this computer, a server for another.
-func spaceMachineGlyph(machine string) string {
+// spaceMachineIcon is a monitor for this computer, a server for another.
+func spaceMachineIcon(machine string) *ui.SVG {
 	if machine == "" {
-		return "▭"
+		return icons.Monitor
 	}
-	return "▤"
+	return icons.Server
 }
 
-// spaceStatusGlyph marks why a space speaks up in the rail.
-func spaceStatusGlyph(status string) string {
-	if status == "blocked" || status == "done" {
-		return "●"
+// localOSName is this app's OS in the names the machine rows use.
+func localOSName() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "macOS"
+	case "windows":
+		return "Windows"
+	case "linux":
+		return "Linux"
+	default:
+		return runtime.GOOS
 	}
-	return "·"
 }
 
 // spaceGitTailParts is what the row shows after a space's name: its repo

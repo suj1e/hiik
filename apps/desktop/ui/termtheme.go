@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/plugins/terminal"
 	mui "github.com/egoist/mygo/ui"
 )
@@ -32,7 +34,7 @@ func terminalLook(t *mui.Theme, settings map[string]any) (*terminal.Theme, termi
 		th.Background = mui.RGBA(th.Background.R, th.Background.G, th.Background.B, opacity)
 	}
 	font := terminal.Font{
-		Family: settingString(settings, "terminal_font"),
+		Family: terminalFamily(settings),
 		Size:   terminalFontSize(settings),
 	}
 	// Coding fonts make most of their ligatures with calt and the rest with
@@ -42,6 +44,22 @@ func terminalLook(t *mui.Theme, settings map[string]any) (*terminal.Theme, termi
 		font.Features = []string{"-calt", "-liga"}
 	}
 	return th, font
+}
+
+// terminalFallbackFamilies follow the terminal's own font, so CJK text uses
+// a family with matching metrics instead of whatever the glyph fallback
+// happens to pick.
+const terminalFallbackFamilies = "Sarasa Mono SC, Noto Sans Mono CJK SC, PingFang SC, Microsoft YaHei UI, monospace"
+
+// terminalFamily is the terminal's family list: the person's font first, then
+// CJK-capable families and the system monospace. It is a comma-separated list
+// as terminal.Font.Family takes it.
+func terminalFamily(settings map[string]any) string {
+	family := strings.TrimSpace(settingString(settings, "terminal_font"))
+	if family == "" {
+		return "monospace, " + terminalFallbackFamilies
+	}
+	return family + ", " + terminalFallbackFamilies
 }
 
 // terminalFontSize is the terminal font size. The frame's zoom scales the
@@ -176,7 +194,7 @@ type termLookKey struct {
 func terminalLookKey(t *mui.Theme, settings map[string]any) termLookKey {
 	return termLookKey{
 		theme:     t,
-		family:    settingString(settings, "terminal_font"),
+		family:    terminalFamily(settings),
 		size:      terminalFontSize(settings),
 		ligatures: settingBool(settings, "ligatures", false),
 		opacity:   terminalOpacity(settings),

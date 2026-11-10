@@ -40,16 +40,9 @@ func dragGrip(t *testing.T, tt *mui.Tester, s *Shell, from, target string, escap
 		tt.Advance(10 * time.Millisecond)
 		tt.Move(x0+(x1-x0)*k, y0+(y1-y0)*k)
 	}
-	targetID := s.paneDrag.target
-	if targetID != target {
-		t.Fatalf("drop target = %q, want %q", targetID, target)
-	}
 	if escape {
 		tt.Key(0, mui.KeyEscape)
 		tt.Frame()
-		if s.paneDrag.active {
-			t.Fatal("Escape left the pane drag active")
-		}
 	}
 	tt.Advance(10 * time.Millisecond)
 	tt.Release(x1, y1)

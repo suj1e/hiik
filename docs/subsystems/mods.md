@@ -50,16 +50,16 @@ page say so. Installing a mod means adding Go code and rebuilding.
 | Mod | Panels | Commands |
 |---|---|---|
 | `spaces` | `spaces/list` | new, rename, close, move |
-| `agents` | `agents/list` | next, prev, focus, pin, peek |
+| `agents` | `agents/list` | next, prev, focus, pin, peek; a click focuses the agent's pane (peek stays a command/menu action) |
 | `tabs` | `tabs/strip` | new, rename, close, move, settle |
 | `panes` | `panes/header` | split, close, zoom, swap |
 | `settings` | `settings/panel` | open |
-| `files` | `files/panel` | open, reveal, copy path |
-| `changes` | `changes/panel` | refresh, open |
-| `worktree` | `worktree/dialog` | new, open, remove |
+| `files` | `files/panel` | open, reveal, copy path; `mygo.WatchFiles` refreshes the tree |
+| `changes` | `changes/panel` | refresh, open; git status refreshes on a timer |
+| `worktree` | `worktree/dialog` | new, open, remove; native `ui.List` |
 | `peek` | `peek/terminal` | open, keep, close |
 | `status` | `status/bar` | connection, retry |
-| `machines` | `machines/panel` | list, add, connect, rename, rm |
+| `machines` | `machines/panel` | list, add, connect, rename, rm; native `ui.List` |
 | `about` | `about/panel` | check updates, what's new |
 
 Panel IDs are global: `api.Panels()` is keyed by the panel ID, not

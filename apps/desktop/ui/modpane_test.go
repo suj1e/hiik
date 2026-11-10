@@ -95,7 +95,7 @@ func TestModWindowOpensAndCloses(t *testing.T) {
 			t.Fatalf("the mod window does not show %q; texts: %q", want, tt.Texts())
 		}
 	}
-	if err := tt.Click("×"); err != nil {
+	if err := tt.Click("Close window"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -130,7 +130,7 @@ func TestModWindowEscapeClosesUnlessKept(t *testing.T) {
 	if !tt.HasText("keep me") {
 		t.Fatalf("a kept mod window closed on Escape: %q", tt.Texts())
 	}
-	if err := tt.Click("×"); err != nil {
+	if err := tt.Click("Close window"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

@@ -43,7 +43,7 @@ func TestMachinesPanel(t *testing.T) {
 	btRenderPanel(t, p, app, nil, "devbox")
 
 	app.machines = []api.Machine{
-		{Name: "builder", Host: "builder.local", State: "ready"},
+		{Name: "builder", Host: "builder.local", State: "ready", OS: "Linux", Arch: "arm64"},
 		{
 			Name:      "sandbox",
 			Host:      "10.0.0.7",
@@ -54,6 +54,7 @@ func TestMachinesPanel(t *testing.T) {
 	}
 	btRenderPanel(t, p, app, nil, "builder")
 	btRenderPanel(t, p, app, nil, "builder.local")
+	btRenderPanel(t, p, app, nil, "Linux")
 
 	// A temporary machine is an agent's sandbox, not a row a person manages.
 	tt := ui.NewTester(func(c *ui.Context) {

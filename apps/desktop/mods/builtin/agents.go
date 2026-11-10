@@ -7,6 +7,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"hiik/icons"
 	"hiik/mods/api"
 )
 
@@ -268,7 +269,7 @@ func renderAgents(rc *api.RenderContext) {
 		if len(roots) == 0 {
 			if !compact {
 				ui.Text(rc.C, "No agent status yet. Agents show up here when they report their status.").
-					FontSize(12).
+					FontSize(t.FontSize - 1).
 					TextColor(t.TextMuted).
 					Padding(12)
 			}
@@ -301,19 +302,22 @@ func sideAgentHeader(rc *api.RenderContext, view *sideAgentView) {
 	ui.Toolbar(rc.C, func() {
 		ui.Text(rc.C, "Agents").FontSize(t.FontSize - 1).Bold().TextColor(t.TextMuted)
 		ui.Spacer(rc.C)
-		if ui.Button(rc.C, view.sort.glyph()).
+		sort := ui.ButtonBase(rc.C).
 			Key("mods/agents/sort").
-			Height(22).
-			Padding(0, 6).
-			Radius(4).
+			Height(t.Space(5.5)).
+			Padding(0, t.Space(1.5)).
+			Radius(t.Space(1)).
 			Label("Sort agents").
-			Tooltip("Sort agents: " + view.sort.label()).
-			Clicked() {
+			Tooltip("Sort agents: " + view.sort.label())
+		sort.Children(func() {
+			ui.Icon(rc.C, view.sort.icon()).FontSize(t.FontSize + 1)
+		})
+		if sort.Clicked() {
 			view.sort = view.sort.next()
 			rc.C.Invalidate()
 		}
-	}).Height(41).
-		Padding(0, 12)
+	}).Height(t.Space(8)).
+		Padding(0, t.Space(3))
 }
 
 // sideAgentOutline draws the sections and their trees with the official
@@ -331,6 +335,11 @@ func sideAgentOutline(rc *api.RenderContext, view *sideAgentView, tree *sideAgen
 	if selected == nil {
 		selected = new(int)
 	}
+	t := rc.C.Theme()
+	// Indent rows ourselves; the fold controls sit on the right.
+	tree.outline.Prefix = func(r ui.OutlineRow) {
+		ui.Box(rc.C).Width(t.Space(4) * float32(r.Depth)).Shrink(0)
+	}
 	tree.ensureOpen(model.branches())
 	tree.outline.List.Header = func(i int) bool {
 		key := tree.outline.Item(i)
@@ -339,11 +348,19 @@ func sideAgentOutline(rc *api.RenderContext, view *sideAgentView, tree *sideAgen
 	*selected = model.rowOf(&tree.outline, sideAgentKey{kind: sideAgentKindAgent, id: active})
 	tree.outline.List.Selected = selected
 
-	ui.Outline(rc.C, &tree.outline, model.roots, model.children, func(key sideAgentKey) {
+	outline := ui.Outline(rc.C, &tree.outline, model.roots, model.children, func(key sideAgentKey) {
 		sideAgentOutlineRow(rc, key, &model, tree, active, view.sort == sideAgentSortPriority, spaceNames, tabNames, durations, shown)
 	}).Grow(1).
 		MinHeight(0).
 		KeepScrollbars(true)
+	if outline.Changed() && *selected >= 0 && *selected < tree.outline.Rows() {
+		key := tree.outline.Item(*selected)
+		if key.kind == sideAgentKindAgent {
+			if node := model.nodes[key.id]; node != nil {
+				sideAgentFocus(rc, node.agent)
+			}
+		}
+	}
 }
 
 // sideAgentOutlineRow draws one row of the outline: a section header, or
@@ -370,38 +387,38 @@ func renderSideAgentSection(rc *api.RenderContext, key sideAgentKey, model *side
 	}
 	t := rc.C.Theme()
 	color := t.TextMuted
-	switch section.status {
-	case "blocked":
+	if section.status == "blocked" {
 		color = t.Danger
-	case "done":
-		color = t.Success
-	case "working":
-		color = t.Accent
+	}
+	open := tree != nil && tree.outline.Open.Has(key)
+	toggle := func() {
+		if tree == nil {
+			return
+		}
+		if open {
+			tree.outline.Open.Remove(key)
+		} else {
+			tree.outline.Open.Add(key)
+		}
+		rc.C.Invalidate()
 	}
 	head := ui.Row(rc.C).
 		Key("mods/agents/section/"+section.id).
 		FillWidth().
-		Height(30).
-		Padding(0, 8).
-		Gap(6).
+		Height(t.Space(7)).
+		Padding(0, t.Space(2)).
+		Gap(t.Space(1.5)).
 		AlignItems(ui.Center).
-		Background(t.Background).
-		OnClick(func() {
-			if tree == nil {
-				return
-			}
-			if tree.outline.Open.Has(key) {
-				tree.outline.Open.Remove(key)
-			} else {
-				tree.outline.Open.Add(key)
-			}
-			rc.C.Invalidate()
-		})
+		Background(t.Surface).
+		OnClick(toggle)
 	head.Children(func() {
-		ui.Text(rc.C, section.label).FontSize(11).Bold().TextColor(color).SingleLine()
-		ui.Badge(rc.C, fmt.Sprintf("%d", len(section.nodes))).
+		ui.Text(rc.C, section.label).FontSize(t.FontSize - 1).TextColor(color).SingleLine()
+		ui.Text(rc.C, fmt.Sprintf("%d", len(section.nodes))).
+			FontSize(t.FontSize - 3).
+			TextColor(t.TextMuted).
 			Tooltip(fmt.Sprintf("%d agents", len(section.nodes)))
 		ui.Box(rc.C).Grow(1)
+		sideAgentFold(rc, t, "section/"+section.id, open, toggle)
 	})
 }
 
@@ -410,93 +427,95 @@ func sideAgentRow(rc *api.RenderContext, key sideAgentKey, node *sideAgentNode, 
 	ag := node.agent
 	row := ui.Row(rc.C.Key("mods/agents/"+ag.Address)).
 		FillWidth().
-		Height(28).
-		Radius(8).
-		Padding(0, 8).
-		Gap(9).
+		Height(t.Space(7)).
+		Radius(t.Radius+2).
+		Padding(0, t.Space(2)).
+		Gap(t.Space(2)).
 		AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).
-		OnClick(func() {
-			if !shown[ag.Address] {
-				sideAgentPeek(rc, ag)
-				return
-			}
-			sideAgentFocus(rc, ag)
-		}).
-		ContextMenu(sideAgentMenu(rc, ag))
+		ContextMenu(sideAgentMenu(rc, ag)).
+		Tooltip(ag.Title)
 	hovered := row.Hovered()
+	space, title := sideAgentRowParts(ag, spaceNames)
+	switch {
+	case selected:
+		row.Background(t.SurfacePressed)
+	case hovered:
+		row.Background(t.SurfaceHover)
+	}
 	row.Children(func() {
 		program, hasProgram := sideProgramFor(rc.App, ag, true)
 		sideProgramBadge(rc.C, t, program, hasProgram, ag.Status)
 
-		ui.Column(rc.C).Grow(1).Gap(1).Children(func() {
-			ui.Row(rc.C).Gap(4).AlignItems(ui.Center).Children(func() {
-				if ag.Pinned {
-					color := t.Accent
-					if selected {
-						color = t.AccentText
-					}
-					ui.Text(rc.C, "★").FontSize(t.FontSize - 1).TextColor(color)
-				}
-				title := ui.Text(rc.C, sideAgentLabel(ag)).FontSize(t.FontSize).SingleLine()
-				if selected {
-					title.TextColor(t.AccentText)
-				}
-			})
-			if meta := sideAgentMeta(ag, spaceNames, tabNames); meta != "" {
-				color := t.TextMuted
-				if selected {
-					color = t.AccentText
-				}
-				ui.Text(rc.C, meta).
-					FontSize(t.FontSize - 2).
-					TextColor(color).
+		ui.Row(rc.C).Grow(1).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+			if space != "" {
+				ui.Text(rc.C, space).
+					FontSize(t.FontSize).
+					Bold().
+					TextColor(t.Text).
 					SingleLine()
+				ui.Text(rc.C, "·").
+					FontSize(t.FontSize - 1).
+					TextColor(t.TextMuted)
 			}
+			ui.Text(rc.C, title).
+				FontSize(t.FontSize - 1).
+				TextColor(t.TextMuted).
+				SingleLine().
+				Grow(1)
 		})
 
-		if children := model.children(key); children != nil && !tree.outline.Open.Has(key) {
-			if hidden := sideAgentVisibleDescendants(node); hidden > 0 {
-				ui.Badge(rc.C, fmt.Sprintf("%d", hidden)).
-					Tooltip("Fold sub-agents")
-			}
-		}
-
 		if hovered {
-			pinGlyph, pinLabel := "⚐", "Pin"
+			pinLabel := "Pin"
 			if ag.Pinned {
-				pinGlyph, pinLabel = "⚑", "Unpin"
+				pinLabel = "Unpin"
 			}
-			ui.ButtonBase(rc.C).
+			pin := ui.ButtonBase(rc.C).
 				Key("mods/agents/pin/"+ag.Address).
-				Height(18).
-				Padding(0, 3).
-				Radius(4).
+				Height(t.Space(4.5)).
+				Padding(0, t.Space(0.75)).
+				Radius(t.Space(1)).
 				Label(pinLabel).
-				Tooltip(pinLabel).
-				OnClick(func() { sideAgentPin(rc, ag) }).
-				Children(func() {
-					color := t.TextMuted
-					if ag.Pinned {
-						color = t.Accent
-					}
-					ui.Text(rc.C, pinGlyph).FontSize(t.FontSize - 1).TextColor(color)
-				})
+				Tooltip(pinLabel)
+			pin.Children(func() {
+				color := t.TextMuted
+				if ag.Pinned {
+					color = t.Accent
+				}
+				ui.Icon(rc.C, icons.Pin).FontSize(t.FontSize - 1).TextColor(color)
+			})
+			pin.OnClick(func() { sideAgentPin(rc, ag) })
 		}
 
+		if ag.Pinned {
+			ui.Icon(rc.C, icons.Pin).
+				FontSize(t.FontSize - 2).
+				TextColor(t.Accent).
+				Tooltip("Pinned")
+		}
 		if since, ok := durations[ag.Address]; ok {
 			label := sideAgentDuration(since)
-			color := t.TextMuted
-			if selected {
-				color = t.AccentText
-			}
 			ui.Text(rc.C, label).
-				FontSize(10).
-				TextColor(color).
+				FontSize(t.FontSize - 3).
+				TextColor(t.TextMuted).
 				SingleLine().
 				Tooltip("Status unchanged for " + label)
 		}
 		sideAgentStatusIndicator(rc, ag.Status, statusCompact, selected)
+		if model.children(key) != nil {
+			open := tree != nil && tree.outline.Open.Has(key)
+			sideAgentFold(rc, t, ag.Address, open, func() {
+				if tree == nil {
+					return
+				}
+				if open {
+					tree.outline.Open.Remove(key)
+				} else {
+					tree.outline.Open.Add(key)
+				}
+				rc.C.Invalidate()
+			})
+		}
 	})
 }
 
@@ -538,19 +557,13 @@ func sideAgentCompactList(rc *api.RenderContext, state *ui.ListState, selected *
 		selected := active != "" && ag.Address == active
 		row := ui.Row(rc.C.Key("mods/agents/compact/"+ag.Address)).
 			FillWidth().
-			Height(26).
-			Radius(6).
-			Padding(0, 8).
-			Gap(4).
+			Height(t.Space(6)).
+			Radius(t.Radius).
+			Padding(0, t.Space(2)).
+			Gap(t.Space(1)).
 			AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).
-			OnClick(func() {
-				if !shown[ag.Address] {
-					sideAgentPeek(rc, ag)
-					return
-				}
-				sideAgentFocus(rc, ag)
-			}).
+			OnClick(func() { sideAgentFocus(rc, ag) }).
 			ContextMenu(sideAgentMenu(rc, ag))
 		row.Children(func() {
 			program, hasProgram := sideProgramFor(rc.App, ag, true)
@@ -560,7 +573,7 @@ func sideAgentCompactList(rc *api.RenderContext, state *ui.ListState, selected *
 			if selected {
 				color = t.AccentText
 			}
-			ui.Text(rc.C, fmt.Sprintf("%d", i+1)).FontSize(10).TextColor(color)
+			ui.Text(rc.C, fmt.Sprintf("%d", i+1)).FontSize(t.FontSize - 3).TextColor(color)
 			sideAgentStatusIndicator(rc, ag.Status, true, selected)
 		})
 	}).Grow(1).
@@ -572,31 +585,50 @@ func sideAgentCompactList(rc *api.RenderContext, state *ui.ListState, selected *
 // program icon: a spinner, a Needs you badge, a dot, or a ring.
 func sideAgentStatusIndicator(rc *api.RenderContext, status string, compact bool, selected bool) {
 	t := rc.C.Theme()
-	accent := t.Accent
-	if selected {
-		accent = t.AccentText
-	}
+	_ = selected
 	switch sideAgentCanonicalStatus(status) {
 	case "working":
-		ui.Spinner(rc.C).FontSize(12).TextColor(accent).Tooltip("Working")
+		ui.Spinner(rc.C).
+			FontSize(t.FontSize - 1).
+			TextColor(t.Warning).
+			Tooltip("Working")
 	case "blocked":
-		text := "Needs you"
-		if compact {
-			text = "!"
-		}
-		ui.Badge(rc.C, text).
-			Background(t.Danger.Mix(t.Background, 0.85)).
-			TextColor(t.Danger).
+		ui.Box(rc.C).
+			Size(t.Space(2), t.Space(2)).
+			Radius(t.Space(1)).
+			Background(t.Danger).
 			Tooltip("Needs you")
 	case "done":
-		ui.Text(rc.C, "●").FontSize(9).TextColor(accent).Tooltip("Done")
+		ui.Box(rc.C).
+			Size(t.Space(2), t.Space(2)).
+			Radius(t.Space(1)).
+			Border(1, t.Success).
+			Tooltip("Done")
 	default:
-		color := t.TextMuted
-		if selected {
-			color = t.AccentText
-		}
-		ui.Text(rc.C, "○").FontSize(11).TextColor(color).Tooltip("Idle")
+		ui.Box(rc.C).
+			Size(t.Space(2), t.Space(2)).
+			Radius(t.Space(1)).
+			Border(1, t.TextMuted).
+			Tooltip("Idle")
 	}
+}
+
+// sideAgentFold is the right-side disclosure control.
+func sideAgentFold(rc *api.RenderContext, t *ui.Theme, key string, open bool, fn func()) {
+	icon := icons.ChevronRight
+	if open {
+		icon = icons.ChevronDown
+	}
+	button := ui.ButtonBase(rc.C).
+		Key("mods/agents/fold/"+key).
+		Size(t.Space(5), t.Space(5)).
+		Radius(t.Space(1)).
+		Label("Fold agents").
+		Tooltip("Fold agents")
+	button.Children(func() {
+		ui.Icon(rc.C, icon).FontSize(12).TextColor(t.TextMuted)
+	})
+	button.OnClick(fn)
 }
 
 // sideAgentPaneTerminals is the set of terminals shown in the active
@@ -670,29 +702,23 @@ func sideAgentMenu(rc *api.RenderContext, ag api.Agent) func(*ui.Menu) {
 	}
 }
 
-// sideAgentMeta is the app and the space/tab an agent belongs to.
-func sideAgentMeta(ag api.Agent, spaceNames, tabNames map[string]string) string {
-	var parts []string
-	if ag.App != "" && ag.App != sideAgentLabel(ag) {
-		parts = append(parts, ag.App)
+// sideAgentRowParts is the row's space and title. The title keeps the
+// program's status glyphs, as the terminal title does; the app and address
+// stand in when there is no title.
+func sideAgentRowParts(ag api.Agent, spaceNames map[string]string) (string, string) {
+	title := strings.TrimSpace(ag.Title)
+	if title == "" {
+		title = strings.TrimSpace(ag.App)
 	}
-	var where []string
-	if ag.Space != "" {
-		name := spaceNames[ag.Space]
-		if name == "" {
-			name = ag.Space
-		}
-		where = append(where, name)
+	if title == "" {
+		title = ag.Address
 	}
-	if ag.Tab != "" {
-		name := tabNames[ag.Tab]
-		if name == "" {
-			name = ag.Tab
-		}
-		where = append(where, name)
+	if ag.Space == "" {
+		return "", title
 	}
-	if len(where) > 0 {
-		parts = append(parts, strings.Join(where, " / "))
+	space := spaceNames[ag.Space]
+	if space == "" {
+		space = ag.Space
 	}
-	return strings.Join(parts, " · ")
+	return space, title
 }

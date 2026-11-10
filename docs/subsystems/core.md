@@ -103,18 +103,29 @@ refresh. A machine has a name, a target and a state (`ready`, `loading`,
 `unavailable`) with the core's message. A space's `Machine` selects where
 its terminals run; the core returns their addresses as `machine/tN`.
 
+For each machine in state `ready`, the app asks `machine.exec` for
+`uname -sm` and falls back to `cmd /c ver`, then reads
+`%PROCESSOR_ARCHITECTURE%` for the architecture; the answer is cached per
+machine name and host for the session. `api.Machine.OS` and `Arch` carry it
+to the Machines panel and the space group headers. A failed probe leaves
+the fields empty and is retried on the next refresh.
+
 ## Attention
 
 The event loop turns status transitions into `api.Notification`s. A notifier
 installed with `App.SetNotifier` receives them off the main thread; the
-shell queues them and shows toasts, playing a short tone when the sound
-setting is on. Notifications are deduplicated per `(terminal, level, turn)`
-and the initial snapshot never notifies.
+shell queues them and plays a short tone when the sound setting is on. A
+focused window shows a toast; a window that is minimized or not focused
+shows a system notification with `mygo.NewNotification`. Notifications are
+deduplicated per `(terminal, level, turn)` and the initial snapshot never
+notifies.
 
 ## Updates and feedback
 
 `App.CheckUpdates` reads the latest GitHub release for `HIIK_UPDATE_REPO`
-when set; it never installs. `App.ReleaseNotes` serves the bundled notes,
+when set; it never installs. Releases are unsigned, so v1 keeps its own
+GitHub check rather than mygo's signed updater; the downloaded package is
+opened with `mygo.Shell.OpenPath`. `App.ReleaseNotes` serves the bundled notes,
 `app.whats_new` opens them, and `App.SaveFeedback` writes a local draft under
 `HIIK_HOME/feedback/`. Telemetry is opt-in; when enabled it writes a local
 JSON audit under `HIIK_HOME/telemetry/` and sends nothing. Updates check a

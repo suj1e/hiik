@@ -85,21 +85,28 @@ func (s *Shell) splitPercent(tabID string, n *api.Node) *float32 {
 func (s *Shell) pane(c *mui.Context, n *api.Node) {
 	t := c.Theme()
 	focused := n.ID == s.focus && !s.overlayOpen()
-	border := t.Border
-	if focused {
-		border = t.Accent
-	}
 	card := mui.Column(c).
 		Fill().
 		Background(t.Surface).
-		Border(1, border).
-		Radius(6).
+		Border(1, t.Border).
+		Radius(t.Radius + 2).
 		Clip()
 	card.Children(func() {
+		if focused {
+			// A focus line, not a loud ring around the whole terminal.
+			mui.Box(c).
+				Absolute().
+				Top(0).
+				Left(0).
+				Right(0).
+				Height(2).
+				Background(t.Accent).
+				PassThrough()
+		}
 		head := mui.Row(c).
-			Height(28).
-			Padding(0, 8).
-			Gap(6).
+			Height(t.Space(6.5)).
+			Padding(0, t.Space(2)).
+			Gap(t.Space(1.5)).
 			AlignItems(mui.Center).
 			OnClick(func() { s.setFocus(n.ID) })
 		head.ContextMenu(func(m *mui.Menu) { s.paneMenu(m, n) })
@@ -113,6 +120,7 @@ func (s *Shell) pane(c *mui.Context, n *api.Node) {
 				"address":  n.Terminal,
 				"terminal": n.Terminal,
 				"focused":  focused,
+				"hovered":  head.Hovered(),
 				"zoomed":   s.zoom == n.ID,
 			}
 			if info, ok := s.terminalInfo(n.Terminal); ok {
@@ -144,7 +152,7 @@ func (s *Shell) paneBody(c *mui.Context, n *api.Node) {
 	t := c.Theme()
 	if n.Terminal == "" {
 		mui.Column(c).Fill().Center().Children(func() {
-			mui.Text(c, "No terminal").FontSize(12).TextColor(t.TextMuted)
+			mui.Text(c, "No terminal").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 		return
 	}
@@ -160,7 +168,7 @@ func (s *Shell) paneBody(c *mui.Context, n *api.Node) {
 			msg = ts.err
 		}
 		mui.Column(c).Fill().Center().Padding(12).Children(func() {
-			mui.Text(c, msg).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			mui.Text(c, msg).FontSize(t.FontSize - 1).TextColor(t.TextMuted).SingleLine()
 		})
 		return
 	}

@@ -133,6 +133,7 @@ needs a `ui.NewTester` test or a screenshot in the PR.
 | MACHINE-02 | Password/host-key/core-missing cases show the command to run | Each state has a message |
 | MACHINE-03 | New spaces and terminals can target a machine | Remote `tN` works |
 | MACHINE-04 | Unreachable machine keeps its spaces, marked unavailable | Sidebar badge; retry |
+| MACHINE-05 | Identify a reachable machine's OS and architecture | Machines panel shows Linux/macOS/Windows; the space group header shows the OS |
 | PROG-01 | Built-in program/agent table with names, icons and colors | Pane headers and agent list agree |
 | PROG-02 | `programs.json` adds or overrides entries | Reload applies |
 

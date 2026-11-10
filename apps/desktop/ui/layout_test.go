@@ -94,7 +94,7 @@ func TestFloatingBlockDrawsAndCloses(t *testing.T) {
 	if !tt.HasText("floaty") {
 		t.Fatalf("the floating block was not drawn; texts: %q", tt.Texts())
 	}
-	if err := tt.Click("×"); err != nil {
+	if err := tt.Click("Close floaty"); err != nil {
 		t.Fatalf("the floating block has no close button: %v", err)
 	}
 	tt.Frame()

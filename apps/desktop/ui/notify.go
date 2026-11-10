@@ -3,6 +3,7 @@ package ui
 import (
 	"sync"
 
+	"github.com/egoist/mygo"
 	mui "github.com/egoist/mygo/ui"
 
 	"hiik/mods/api"
@@ -34,9 +35,11 @@ func Notify(n api.Notification) {
 	}
 }
 
-// DrainNotifications shows up to a few queued notifications with c.Toast and
-// keeps the rest for later frames. The shell calls it once per frame.
-func DrainNotifications(c *mui.Context) {
+// DrainNotifications shows up to a few queued notifications and keeps the
+// rest for later frames. The shell calls it once per frame; away means the
+// window is not focused or is minimized, so the system notification is the
+// one a person can see.
+func DrainNotifications(c *mui.Context, away bool) {
 	if c == nil {
 		return
 	}
@@ -46,6 +49,14 @@ func DrainNotifications(c *mui.Context) {
 	pending.list = append([]api.Notification(nil), pending.list[n:]...)
 	pending.mu.Unlock()
 	for _, item := range batch {
+		if away {
+			_ = mygo.NewNotification(mygo.NotificationOptions{
+				Title:  item.Title,
+				Body:   item.Body,
+				Silent: true, // the app's own tone plays in Notify.
+			}).Show()
+			continue
+		}
 		c.Toast(notificationText(item))
 	}
 }

@@ -1,9 +1,14 @@
-// Command gen-icon draws the app icon and writes it as a PNG: a dark
-// rounded square with a terminal prompt in the accent color. It uses only the
-// standard library, so `go run ./gen-icon` works in a fresh checkout.
+// Command gen-icon draws the app icon and writes it as a PNG.
 //
-// Run it from the scripts directory; the default output is the app module's
-// resources/icon.png, which mygo picks up without configuration.
+// The mark is a split workspace: a narrow pane, a wider terminal pane and a
+// prompt. The plate follows the macOS icon grid (824 of 1024, continuous
+// corners, transparent outside), so Finder, the dock, Windows and Linux all
+// get the same artwork from one file. At 16 px the pane fills blur into the
+// plate and the prompt remains legible.
+//
+// It uses only the standard library, so `go run ./gen-icon` works in a fresh
+// checkout. Run it from the scripts directory; the default output is the app
+// module's resources/icon.png, which mygo picks up without configuration.
 package main
 
 import (
@@ -21,9 +26,15 @@ import (
 // size, so the geometry below stays readable.
 const design = 1024
 
+// The plate is centered with 100 units of transparent margin on each side,
+// matching the macOS app icon grid.
+const plateHalf = 412.0
+
 var (
-	background = color.NRGBA{R: 0x16, G: 0x1b, B: 0x21, A: 0xff}
-	accent     = color.NRGBA{R: 0x5e, G: 0xea, B: 0xd4, A: 0xff}
+	plateTop    = color.NRGBA{R: 0x18, G: 0x21, B: 0x2b, A: 0xff}
+	plateBottom = color.NRGBA{R: 0x0c, G: 0x11, B: 0x17, A: 0xff}
+	pane        = color.NRGBA{R: 0x1c, G: 0x28, B: 0x36, A: 0xff}
+	accent      = color.NRGBA{R: 0x5e, G: 0xea, B: 0xd4, A: 0xff}
 )
 
 func main() {
@@ -53,62 +64,116 @@ func main() {
 	fmt.Printf("wrote %s (%dx%d, %d bytes)\n", *out, img.Bounds().Dx(), img.Bounds().Dy(), info.Size())
 }
 
-// render draws the icon at size×size. The rounded square is inset, so the
-// corners stay transparent for the shapes the platforms put behind an icon.
+// pixel is a straight-alpha color used while the layers are composited.
+type pixel struct {
+	r, g, b, a float64
+}
+
+// over places src on top of dst.
+func over(dst, src pixel) pixel {
+	a := src.a + dst.a*(1-src.a)
+	if a == 0 {
+		return pixel{}
+	}
+	return pixel{
+		r: (src.r*src.a + dst.r*dst.a*(1-src.a)) / a,
+		g: (src.g*src.a + dst.g*dst.a*(1-src.a)) / a,
+		b: (src.b*src.a + dst.b*dst.a*(1-src.a)) / a,
+		a: a,
+	}
+}
+
+// solid turns a color into an opaque pixel at the given coverage.
+func solid(c color.NRGBA, alpha float64) pixel {
+	return pixel{
+		r: float64(c.R) / 255,
+		g: float64(c.G) / 255,
+		b: float64(c.B) / 255,
+		a: alpha,
+	}
+}
+
+// render draws the icon at size×size. The plate edge is antialiased; the
+// transparent margin stays empty.
 func render(size int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	scale := float64(size) / design
 	for y := range size {
 		for x := range size {
-			// Sample the pixel's center in design units.
 			px := (float64(x) + 0.5) / scale
 			py := (float64(y) + 0.5) / scale
-
-			// Distances in pixels, so coverage is one design pixel wide.
-			plate := coverage(sdRoundRect(px, py, 512, 512, 472, 472, 220) * scale)
-			mark := coverage(sdMark(px, py) * scale)
-			if plate == 0 && mark == 0 {
-				continue
-			}
-
-			// Source-over: the accent mark on the plate. Everything is
-			// premultiplied here and made straight again below.
-			alpha := mark + plate*(1-mark)
-			r := float64(accent.R)*mark + float64(background.R)*plate*(1-mark)
-			g := float64(accent.G)*mark + float64(background.G)*plate*(1-mark)
-			b := float64(accent.B)*mark + float64(background.B)*plate*(1-mark)
-			if alpha == 0 {
+			c := shade(px, py, scale)
+			if c.a == 0 {
 				continue
 			}
 			img.SetNRGBA(x, y, color.NRGBA{
-				R: uint8(clamp(r/alpha, 0, 255) + 0.5),
-				G: uint8(clamp(g/alpha, 0, 255) + 0.5),
-				B: uint8(clamp(b/alpha, 0, 255) + 0.5),
-				A: uint8(alpha*255 + 0.5),
+				R: uint8(clamp(c.r, 0, 1)*255 + 0.5),
+				G: uint8(clamp(c.g, 0, 1)*255 + 0.5),
+				B: uint8(clamp(c.b, 0, 1)*255 + 0.5),
+				A: uint8(clamp(c.a, 0, 1)*255 + 0.5),
 			})
 		}
 	}
 	return img
 }
 
-// sdMark is the signed distance to the accent mark, a ">" prompt and the
-// cursor after it, as capsules: rounded ends at their radius.
+// shade composites the plate, the two panes and the prompt for one point in
+// design units. scale is output pixels per design unit, so distances turn
+// into coverage widths.
+func shade(x, y, scale float64) pixel {
+	var out pixel
+
+	if a := plateCoverage(x, y, scale); a > 0 {
+		t := clamp((y-100)/(2*plateHalf), 0, 1)
+		out = over(out, solid(mix(plateTop, plateBottom, t), a))
+	}
+
+	// The left pane is a sidebar; the right one is the terminal surface and
+	// stays quieter so the prompt reads first.
+	if a := coverage(sdRoundRect(x, y, 330, 512, 96, 212, 40) * scale); a > 0 {
+		out = over(out, solid(pane, a))
+	}
+	if a := coverage(sdRoundRect(x, y, 646, 512, 180, 212, 40) * scale); a > 0 {
+		out = over(out, solid(pane, a*0.55))
+	}
+
+	// The prompt: a chevron and the cursor after it.
+	if a := coverage(sdMark(x, y) * scale); a > 0 {
+		out = over(out, solid(accent, a))
+	}
+
+	return out
+}
+
+// plateCoverage returns the coverage of the superellipse plate. The exponent
+// approximates the continuous corners of the macOS icon grid; the distance
+// estimate is only used at the edge.
+func plateCoverage(x, y, scale float64) float64 {
+	const n = 5.0
+	dx := math.Abs(x-512) / plateHalf
+	dy := math.Abs(y-512) / plateHalf
+	v := math.Pow(dx, n) + math.Pow(dy, n)
+	if v <= 1 {
+		return 1
+	}
+	return coverage((v - 1) * plateHalf * 0.25 * scale)
+}
+
+// sdMark is the signed distance to the prompt, a ">" chevron and the cursor
+// after it, as capsules: rounded ends at their radius.
 func sdMark(x, y float64) float64 {
-	const radius = 56
-	// The chevron's arms, from its upper and lower left to the point.
-	top := sdCapsule(x, y, 320, 330, 500, 512)
-	bottom := sdCapsule(x, y, 320, 694, 500, 512)
-	bar := sdCapsule(x, y, 588, 694, 700, 694)
-	return math.Min(math.Min(top, bottom), bar) - radius
+	top := sdCapsule(x, y, 556, 428, 640, 512, 46)
+	bottom := sdCapsule(x, y, 640, 512, 556, 596, 46)
+	bar := sdCapsule(x, y, 690, 596, 772, 596, 46)
+	return math.Min(math.Min(top, bottom), bar)
 }
 
 // sdCapsule is the signed distance from a point to the segment a-b.
-func sdCapsule(x, y, ax, ay, bx, by float64) float64 {
+func sdCapsule(x, y, ax, ay, bx, by, r float64) float64 {
 	px, py := x-ax, y-ay
 	bax, bay := bx-ax, by-ay
-	// The projection of p onto a-b, clamped to the segment.
 	h := clamp((px*bax+py*bay)/(bax*bax+bay*bay), 0, 1)
-	return math.Hypot(px-h*bax, py-h*bay)
+	return math.Hypot(px-h*bax, py-h*bay) - r
 }
 
 // sdRoundRect is the signed distance from a point to a rounded rectangle
@@ -125,6 +190,16 @@ func sdRoundRect(x, y, cx, cy, hw, hh, r float64) float64 {
 // inside the shape, with a one pixel wide edge.
 func coverage(distance float64) float64 {
 	return clamp(0.5-distance, 0, 1)
+}
+
+// mix interpolates two colors in sRGB.
+func mix(a, b color.NRGBA, t float64) color.NRGBA {
+	return color.NRGBA{
+		R: uint8(clamp(float64(a.R)+(float64(b.R)-float64(a.R))*t, 0, 255) + 0.5),
+		G: uint8(clamp(float64(a.G)+(float64(b.G)-float64(a.G))*t, 0, 255) + 0.5),
+		B: uint8(clamp(float64(a.B)+(float64(b.B)-float64(a.B))*t, 0, 255) + 0.5),
+		A: 0xff,
+	}
 }
 
 func clamp(v, lo, hi float64) float64 {

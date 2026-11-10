@@ -48,6 +48,7 @@ type worktreeState struct {
 	message    string
 	messageErr bool
 	confirm    string // the path the Remove confirmation names
+	list       ui.ListState
 }
 
 var (
@@ -195,13 +196,12 @@ func renderWorktreePanel(rc *api.RenderContext) {
 			return
 		}
 		ui.Column(c).Fill().Children(func() {
-			ui.Scroll(c).Grow(1).Children(func() {
-				ui.Column(c).Gap(2).Padding(4).Children(func() {
-					for _, wt := range st.items {
-						worktreeRow(rc, c, st, t, wt)
-					}
-				})
-			})
+			state := &st.list
+			state.Key = func(i int) any { return st.items[i].Path }
+			state.Label = func(i int) string { return st.items[i].Path }
+			ui.List(c, state, len(st.items), func(i int) {
+				worktreeRow(rc, c, st, t, st.items[i])
+			}).Grow(1).Padding(4)
 			worktreeForm(c, st, t)
 		})
 	})
@@ -216,12 +216,12 @@ func worktreeHeader(c *ui.Context, st *worktreeState, t *ui.Theme) {
 		BorderWidth(0, 0, 1, 0).
 		BorderColor(t.Border).
 		Children(func() {
-			ui.Text(c, "Worktrees").FontSize(12).Bold()
+			ui.Text(c, "Worktrees").FontSize(t.FontSize - 1).Bold()
 			label := st.label()
 			if st.root != "" {
 				label = machineLabel(st.on, st.root)
 			}
-			ui.Text(c, label).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).Tooltip(label)
+			ui.Text(c, label).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine().Grow(1).Tooltip(label)
 			if ui.Button(c.Key("worktree/refresh"), "Refresh").Clicked() {
 				st.reloadLocked()
 				st.setMessage(nil, "")
@@ -245,21 +245,21 @@ func worktreeRow(rc *api.RenderContext, c *ui.Context, st *worktreeState, t *ui.
 				if name == "." || name == string(filepath.Separator) || name == "" {
 					name = wt.Path
 				}
-				ui.Text(c, name).FontSize(12).Bold().SingleLine()
+				ui.Text(c, name).FontSize(t.FontSize - 1).Bold().SingleLine()
 				if wt.Branch != "" {
-					ui.Text(c, wt.Branch).FontSize(10).TextColor(t.TextMuted).SingleLine()
+					ui.Text(c, wt.Branch).FontSize(t.FontSize - 3).TextColor(t.TextMuted).SingleLine()
 				}
 				if wt.Bare {
-					ui.Text(c, "bare").FontSize(10).TextColor(t.TextMuted)
+					ui.Text(c, "bare").FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 				}
 				if wt.Detached {
-					ui.Text(c, "detached").FontSize(10).TextColor(t.TextMuted)
+					ui.Text(c, "detached").FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 				}
 				if wt.Locked {
-					ui.Text(c, "locked").FontSize(10).TextColor(t.Warning).Tooltip(wt.LockReason)
+					ui.Text(c, "locked").FontSize(t.FontSize - 3).TextColor(t.Warning).Tooltip(wt.LockReason)
 				}
 				if wt.Prunable {
-					ui.Text(c, "prunable").FontSize(10).TextColor(t.Warning).Tooltip(wt.PruneReason)
+					ui.Text(c, "prunable").FontSize(t.FontSize - 3).TextColor(t.Warning).Tooltip(wt.PruneReason)
 				}
 				ui.Box(c).Grow(1)
 				if ui.Button(c.Key(key+"/open"), "Open").Clicked() {
@@ -270,10 +270,10 @@ func worktreeRow(rc *api.RenderContext, c *ui.Context, st *worktreeState, t *ui.
 					st.setMessage(nil, "")
 				}
 			})
-			ui.Text(c, wt.Path).FontSize(10).TextColor(t.TextMuted).SingleLine().Tooltip(wt.Path)
+			ui.Text(c, wt.Path).FontSize(t.FontSize - 3).TextColor(t.TextMuted).SingleLine().Tooltip(wt.Path)
 			if st.confirm == wt.Path {
 				ui.Text(c, "Remove this worktree? Its folder and any uncommitted changes are discarded.").
-					FontSize(11).TextColor(t.Danger).Padding(2, 0)
+					FontSize(t.FontSize-2).TextColor(t.Danger).Padding(2, 0)
 				ui.Row(c).Gap(6).Children(func() {
 					if ui.Button(c.Key(key+"/confirm"), "Remove").Clicked() {
 						worktreeRemove(st, wt.Path, false)
@@ -347,7 +347,7 @@ func worktreeForm(c *ui.Context, st *worktreeState, t *ui.Theme) {
 		BorderWidth(1, 0, 0, 0).
 		BorderColor(t.Border).
 		Children(func() {
-			ui.Text(c, "New worktree").FontSize(11).Bold()
+			ui.Text(c, "New worktree").FontSize(t.FontSize - 2).Bold()
 			ui.Row(c).Gap(6).Children(func() {
 				ui.TextInput(c.Key("worktree/branch"), &st.branch).
 					Placeholder("branch").
@@ -374,13 +374,13 @@ func worktreeForm(c *ui.Context, st *worktreeState, t *ui.Theme) {
 					hint = "Default path: " + defaultWorktreePath(st.root, branch)
 				}
 			}
-			ui.Text(c, hint).FontSize(10).TextColor(t.TextMuted).SingleLine().Tooltip(hint)
+			ui.Text(c, hint).FontSize(t.FontSize - 3).TextColor(t.TextMuted).SingleLine().Tooltip(hint)
 			if st.message != "" {
 				color := t.TextMuted
 				if st.messageErr {
 					color = t.Danger
 				}
-				ui.Text(c, st.message).FontSize(10).TextColor(color).SingleLine().Tooltip(st.message)
+				ui.Text(c, st.message).FontSize(t.FontSize - 3).TextColor(color).SingleLine().Tooltip(st.message)
 			}
 		})
 }

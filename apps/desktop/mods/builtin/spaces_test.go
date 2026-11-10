@@ -2,72 +2,13 @@ package builtin
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
 
 	"hiik/mods/api"
 )
-
-func TestSpaceListEntriesGroupMachines(t *testing.T) {
-	rows := []spaceRow{
-		{Space: api.Space{ID: "l1", Name: "Local"}},
-		{Space: api.Space{ID: "r1", Name: "Remote", Machine: "builder"}},
-	}
-	groups, grouped := spaceMachineGroups(rows, []api.Machine{{Name: "builder", State: "ready"}})
-	if !grouped {
-		t.Fatal("a remote machine must group rows")
-	}
-	entries := spaceListEntries(rows, groups, grouped)
-	want := []spaceListEntry{
-		{Group: 0, Row: -1},
-		{Group: -1, Row: 0},
-		{Group: 1, Row: -1},
-		{Group: -1, Row: 1},
-	}
-	if !reflect.DeepEqual(entries, want) {
-		t.Fatalf("entries = %#v, want %#v", entries, want)
-	}
-	flat := spaceListEntries(rows, nil, false)
-	if len(flat) != 2 || flat[0].Row != 0 || flat[1].Row != 1 {
-		t.Fatalf("flat entries = %#v", flat)
-	}
-}
-
-func TestSpaceReorderTargetSkipsHeaders(t *testing.T) {
-	rows := []spaceRow{
-		{Space: api.Space{ID: "a"}, Index: 0},
-		{Space: api.Space{ID: "b"}, Index: 1},
-		{Space: api.Space{ID: "c"}, Index: 2},
-	}
-	entries := spaceListEntries(rows, nil, false)
-	cases := []struct {
-		from, to, want int
-	}{
-		{0, 2, 1}, // before c, after b
-		{2, 0, 0}, // before a
-		{0, 3, 2}, // past the last row
-		{1, 1, 1}, // where it is
-	}
-	for _, tc := range cases {
-		if got := spaceReorderTarget(entries, rows, tc.from, tc.to, len(rows)); got != tc.want {
-			t.Errorf("reorder(%d -> %d) = %d, want %d", tc.from, tc.to, got, tc.want)
-		}
-	}
-	grouped := []spaceListEntry{
-		{Group: 0, Row: -1},
-		{Group: -1, Row: 0},
-		{Group: -1, Row: 1},
-		{Group: 1, Row: -1},
-		{Group: -1, Row: 2},
-	}
-	if got := spaceReorderTarget(grouped, rows, 1, 0, len(rows)); got != 0 {
-		t.Errorf("reorder across a header = %d, want 0", got)
-	}
-	if got := spaceReorderTarget(grouped, rows, 1, 5, len(rows)); got != 2 {
-		t.Errorf("reorder past the end = %d, want 2", got)
-	}
-}
 
 func TestParseSpaceGitStatus(t *testing.T) {
 	out := "# branch.oid abc\n# branch.head spike\n# branch.upstream origin/spike\n# branch.ab +12 -3\n"
@@ -149,7 +90,7 @@ func TestSpaceMachineGroups(t *testing.T) {
 		{Space: api.Space{ID: "l1", Name: "Local"}},
 		{Space: api.Space{ID: "r1", Name: "Remote", Machine: "builder"}},
 	}
-	groups, grouped := spaceMachineGroups(rows, []api.Machine{{Name: "builder", State: "ready"}})
+	groups, grouped := spaceMachineGroups(rows, []api.Machine{{Name: "builder", State: "ready", OS: "Linux", Arch: "amd64"}})
 	if !grouped {
 		t.Fatal("a remote machine must group rows")
 	}
@@ -159,11 +100,17 @@ func TestSpaceMachineGroups(t *testing.T) {
 	if groups[0].Machine != "" || groups[0].Label != "This computer" {
 		t.Fatalf("local group = %#v", groups[0])
 	}
+	if groups[0].OS != localOSName() || groups[0].Arch != runtime.GOARCH {
+		t.Fatalf("local OS = %q %q, want %q %q", groups[0].OS, groups[0].Arch, localOSName(), runtime.GOARCH)
+	}
 	if len(groups[0].Spaces) != 1 || groups[0].Spaces[0].Space.ID != "l1" {
 		t.Fatalf("local spaces = %#v", groups[0].Spaces)
 	}
 	if groups[1].Machine != "builder" || groups[1].Label != "builder" || groups[1].State != "ready" {
 		t.Fatalf("remote group = %#v", groups[1])
+	}
+	if groups[1].OS != "Linux" || groups[1].Arch != "amd64" {
+		t.Fatalf("remote OS = %q %q, want Linux amd64", groups[1].OS, groups[1].Arch)
 	}
 	if len(groups[1].Spaces) != 1 || groups[1].Spaces[0].Space.ID != "r1" {
 		t.Fatalf("remote spaces = %#v", groups[1].Spaces)
@@ -273,7 +220,7 @@ func TestSpacesPanelGroupsMachinesAndShowsGitTail(t *testing.T) {
 				{ID: "s1", Name: "api", Folder: mainDir},
 				{ID: "s2", Name: "worker", Folder: "/remote/work", Machine: "builder"},
 			},
-			machines: []api.Machine{{Name: "builder", State: "ready"}},
+			machines: []api.Machine{{Name: "builder", State: "ready", OS: "Linux", Arch: "arm64"}},
 			active:   "s1",
 		},
 		exec: func(on, command string, args ...string) (string, string, int, error) {
@@ -301,7 +248,7 @@ func TestSpacesPanelGroupsMachinesAndShowsGitTail(t *testing.T) {
 		p.Render(&api.RenderContext{C: c, App: app})
 	}, 900, 600)
 	tt.Frame()
-	for _, want := range []string{"Spaces", "api", "This computer", "builder", "worker", "spike", "↑2", "↓1"} {
+	for _, want := range []string{"Spaces", "api", "This computer", "builder", "worker", "spike", "↑2", "↓1", "Linux"} {
 		if !tt.HasText(want) {
 			t.Errorf("spaces panel did not show %q; texts: %v", want, tt.Texts())
 		}

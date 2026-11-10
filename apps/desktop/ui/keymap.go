@@ -6,6 +6,7 @@ import (
 
 	mui "github.com/egoist/mygo/ui"
 
+	"hiik/keys"
 	"hiik/mods/api"
 )
 
@@ -116,30 +117,21 @@ func keymapSectionTitle(section string) string {
 // keymapEdit applies one chord to a copy of the keys setting. An empty,
 // "none", "unbound" or "-" value unbinds the command. It reports whether the
 // chord is valid; an invalid chord leaves the map untouched.
-func keymapEdit(keys map[string]string, command, raw string) (map[string]string, bool) {
-	out := make(map[string]string, len(keys)+1)
-	for name, chord := range keys {
+func keymapEdit(bindings map[string]string, command, raw string) (map[string]string, bool) {
+	out := make(map[string]string, len(bindings)+1)
+	for name, chord := range bindings {
 		out[name] = chord
 	}
 	raw = strings.TrimSpace(raw)
-	if isUnbound(raw) {
+	if keys.Unbound(raw) {
 		out[command] = ""
 		return out, true
 	}
-	if _, _, ok := parseChord(raw); !ok {
+	if _, _, ok := keys.Parse(raw); !ok {
 		return nil, false
 	}
 	out[command] = raw
 	return out, true
-}
-
-// isUnbound reports whether a keymap value removes an action's binding.
-func isUnbound(chord string) bool {
-	switch strings.ToLower(strings.TrimSpace(chord)) {
-	case "", "none", "unbound", "-":
-		return true
-	}
-	return false
 }
 
 // resolveShortcut picks the chord for one action: its override when the
@@ -149,135 +141,14 @@ func resolveShortcut(sc shortcut, overrides map[string]string) (mods mui.Modifie
 	chord := sc.chord
 	if raw, has := overrides[sc.action]; has {
 		overridden = true
-		if isUnbound(raw) {
+		if keys.Unbound(raw) {
 			return 0, 0, false, true
 		}
 		chord = raw
 	}
-	mods, key, ok = parseChord(chord)
+	mods, key, ok = keys.Parse(chord)
 	if !ok {
 		return 0, 0, false, overridden
 	}
 	return mods, key, true, overridden
-}
-
-// parseChord reads a chord as "Mod+Shift+K": Mod is the platform's shortcut
-// modifier, and the named keys include letters, digits, function keys and the
-// navigation keys.
-func parseChord(chord string) (mui.Modifiers, mui.Key, bool) {
-	parts := strings.Split(chord, "+")
-	keyName := strings.TrimSpace(parts[len(parts)-1])
-	var mods mui.Modifiers
-	for _, part := range parts[:len(parts)-1] {
-		mod, ok := parseModifier(part)
-		if !ok {
-			return 0, 0, false
-		}
-		mods |= mod
-	}
-	key, ok := parseKey(keyName)
-	if !ok {
-		return 0, 0, false
-	}
-	return mods, key, true
-}
-
-// parseModifier reads one modifier name.
-func parseModifier(name string) (mui.Modifiers, bool) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "mod":
-		return shortcutMods(), true
-	case "cmd", "command", "super", "meta":
-		return mui.Super, true
-	case "ctrl", "control":
-		return mui.Ctrl, true
-	case "alt", "opt", "option":
-		return mui.Alt, true
-	case "shift":
-		return mui.Shift, true
-	}
-	return 0, false
-}
-
-// parseKey reads one key name, by letter, digit, function key or name.
-func parseKey(name string) (mui.Key, bool) {
-	upper := strings.ToUpper(strings.TrimSpace(name))
-	if k, ok := namedKeys[upper]; ok {
-		return k, true
-	}
-	return 0, false
-}
-
-var namedKeys = func() map[string]mui.Key {
-	m := map[string]mui.Key{
-		"ENTER":     mui.KeyEnter,
-		"RETURN":    mui.KeyEnter,
-		"ESC":       mui.KeyEscape,
-		"ESCAPE":    mui.KeyEscape,
-		"TAB":       mui.KeyTab,
-		"SPACE":     mui.KeySpace,
-		"BACKSPACE": mui.KeyBackspace,
-		"DELETE":    mui.KeyDelete,
-		"INSERT":    mui.KeyInsert,
-		"HOME":      mui.KeyHome,
-		"END":       mui.KeyEnd,
-		"PAGEUP":    mui.KeyPageUp,
-		"PAGEDOWN":  mui.KeyPageDown,
-		"LEFT":      mui.KeyLeft,
-		"RIGHT":     mui.KeyRight,
-		"UP":        mui.KeyUp,
-		"DOWN":      mui.KeyDown,
-		"COMMA":     mui.KeyComma,
-		"PERIOD":    mui.KeyPeriod,
-		"SLASH":     mui.KeySlash,
-		"BACKSLASH": mui.KeyBackslash,
-		"SEMICOLON": mui.KeySemicolon,
-		"QUOTE":     mui.KeyQuote,
-		"MINUS":     mui.KeyMinus,
-		"EQUAL":     mui.KeyEqual,
-		"BACKQUOTE": mui.KeyBackquote,
-		"[":         mui.KeyBracketLeft,
-		"]":         mui.KeyBracketRight,
-		",":         mui.KeyComma,
-		".":         mui.KeyPeriod,
-		"/":         mui.KeySlash,
-		"\\":        mui.KeyBackslash,
-		";":         mui.KeySemicolon,
-		"'":         mui.KeyQuote,
-		"-":         mui.KeyMinus,
-		"=":         mui.KeyEqual,
-		"`":         mui.KeyBackquote,
-	}
-	for r := 'A'; r <= 'Z'; r++ {
-		if k, ok := letterKeys[r]; ok {
-			m[string(r)] = k
-		}
-	}
-	for i, k := range digitKeys {
-		m[fmt.Sprintf("%d", i)] = k
-	}
-	for i, k := range functionKeys {
-		m[fmt.Sprintf("F%d", i+1)] = k
-	}
-	return m
-}()
-
-var letterKeys = map[rune]mui.Key{
-	'A': mui.KeyA, 'B': mui.KeyB, 'C': mui.KeyC, 'D': mui.KeyD,
-	'E': mui.KeyE, 'F': mui.KeyF, 'G': mui.KeyG, 'H': mui.KeyH,
-	'I': mui.KeyI, 'J': mui.KeyJ, 'K': mui.KeyK, 'L': mui.KeyL,
-	'M': mui.KeyM, 'N': mui.KeyN, 'O': mui.KeyO, 'P': mui.KeyP,
-	'Q': mui.KeyQ, 'R': mui.KeyR, 'S': mui.KeyS, 'T': mui.KeyT,
-	'U': mui.KeyU, 'V': mui.KeyV, 'W': mui.KeyW, 'X': mui.KeyX,
-	'Y': mui.KeyY, 'Z': mui.KeyZ,
-}
-
-var digitKeys = [...]mui.Key{
-	mui.Key0, mui.Key1, mui.Key2, mui.Key3, mui.Key4,
-	mui.Key5, mui.Key6, mui.Key7, mui.Key8, mui.Key9,
-}
-
-var functionKeys = [...]mui.Key{
-	mui.KeyF1, mui.KeyF2, mui.KeyF3, mui.KeyF4, mui.KeyF5, mui.KeyF6,
-	mui.KeyF7, mui.KeyF8, mui.KeyF9, mui.KeyF10, mui.KeyF11, mui.KeyF12,
 }

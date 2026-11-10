@@ -42,7 +42,7 @@ func TestTabsShowStatusAndOneClose(t *testing.T) {
 	}
 	closes := 0
 	for _, text := range tt.Texts() {
-		if text == "✕" {
+		if text == "Close tab" {
 			closes++
 		}
 	}

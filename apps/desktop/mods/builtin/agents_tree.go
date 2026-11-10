@@ -3,6 +3,9 @@ package builtin
 import (
 	"sort"
 
+	"github.com/egoist/mygo/ui"
+
+	"hiik/icons"
 	"hiik/mods/api"
 )
 
@@ -140,12 +143,12 @@ func (s sideAgentSort) label() string {
 	return "Priority"
 }
 
-// glyph is the button's text icon: a clock for priority, layers for spaces.
-func (s sideAgentSort) glyph() string {
+// icon is the button's icon: a clock for priority, layers for spaces.
+func (s sideAgentSort) icon() *ui.SVG {
 	if s == sideAgentSortGrouped {
-		return "☰"
+		return icons.Layers
 	}
-	return "◷"
+	return icons.Clock
 }
 
 // sideAgentSections collects the roots into the Pinned section first, then

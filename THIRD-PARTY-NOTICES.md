@@ -23,5 +23,20 @@ hiik is MIT licensed. It depends on and vendors the following:
   printed by `hc schema` (herdr-core 0.1.19). The full license text is in
   `contracts/LICENSE-APACHE-2.0`.
 
+## Lucide icons
+
+- License: ISC
+- Copyright: Lucide contributors
+- Use: the Lucide-shaped SVGs in `apps/desktop/icons/svg` (`search`,
+  `panel-left`, `monitor`, `server`, `branch`, `clock`, `layers`, `x`,
+  `folder`, `pin`, `terminal`); `mark.svg` is hiik's own.
+
+## Program marks
+
+- Use: the SVGs in `apps/desktop/resources/icons` identify the programs in
+  `programs.json`.
+- They remain the trademarks of their projects, used nominatively; no
+  license is granted by this repository. See that folder's README.
+
 The app talks to herdr-core over its documented API. No source code from
 another desktop client is included.

@@ -8,50 +8,32 @@ import (
 	"hiik/mods/api"
 )
 
-// paneDragState is one grip drag: which pane is dragged, where the pointer
-// is in the window, and the drop target under it.
-type paneDragState struct {
-	active bool
-	source string
-	startX float32
-	startY float32
-	x      float32
-	y      float32
-	moved  bool
-	target string
-	edge   string // left, right, up, down, or "" to swap
-}
-
 // paneGripSize is the small handle over a pane card.
 const (
-	paneGripW     float32 = 28
-	paneGripH     float32 = 18
-	paneDragSlop  float32 = 4
-	paneDropShare float32 = 0.25
+	paneGripW float32 = 28
+	paneGripH float32 = 18
 )
 
 func init() {
 	registerShellHook(paneGripHook)
 }
 
-// paneGripHook draws the pane grips and the drop preview. It runs at the
-// end of the shell's frame, above the panes and below notifications.
+// paneGripHook draws the pane grips and, while one is dragging, the native
+// drop zones over the other panes. It runs above the panes and below
+// notifications.
 func paneGripHook(s *Shell, c *mui.Context) {
 	if s == nil || c == nil {
 		return
 	}
 	if s.overlayOpen() || s.zoom != "" {
-		s.paneDrag = paneDragState{}
 		return
 	}
 	_, tab := s.activeTab()
 	if tab == nil || tab.Root == nil || s.paneArea.W <= 0 || s.paneArea.H <= 0 {
-		s.paneDrag = paneDragState{}
 		return
 	}
 	rects := tabPaneRects(tab)
 	if len(rects) < 2 {
-		s.paneDrag = paneDragState{}
 		return
 	}
 
@@ -62,20 +44,20 @@ func paneGripHook(s *Shell, c *mui.Context) {
 	}
 	sort.Strings(ids)
 
+	dragging := false
 	for _, id := range ids {
-		s.paneGrip(c, t, id, s.windowPaneRect(rects[id]))
+		if s.paneGrip(c, t, id, s.windowPaneRect(rects[id])) {
+			dragging = true
+		}
 	}
-
-	if s.paneDrag.active {
-		c.OnWindowShortcut(0, mui.KeyEscape, func() {
-			s.paneDrag = paneDragState{}
-		})
+	for _, id := range ids {
+		s.paneDropZones(c, t, id, s.windowPaneRect(rects[id]), dragging)
 	}
-	s.paneDropPreview(c, t, rects)
 }
 
-// paneGrip draws one grip and follows the pointer while it presses it.
-func (s *Shell) paneGrip(c *mui.Context, t *mui.Theme, id string, r mui.Rect) {
+// paneGrip draws one grip. A press that moves starts mygo's native drag;
+// a press that does not move focuses the pane.
+func (s *Shell) paneGrip(c *mui.Context, t *mui.Theme, id string, r mui.Rect) bool {
 	x := r.X + (r.W-paneGripW)/2
 	y := r.Y + 5
 	grip := mui.Box(c).
@@ -89,8 +71,9 @@ func (s *Shell) paneGrip(c *mui.Context, t *mui.Theme, id string, r mui.Rect) {
 		Border(1, t.Border).
 		Cursor(mui.CursorGrab).
 		Label("Move pane " + id).
+		Drag(id).
 		OnClick(func() { s.setFocus(id) })
-	if s.paneDrag.active && s.paneDrag.source == id {
+	if grip.Dragging() {
 		grip.Cursor(mui.CursorGrabbing)
 	}
 	grip.Children(func() {
@@ -102,42 +85,62 @@ func (s *Shell) paneGrip(c *mui.Context, t *mui.Theme, id string, r mui.Rect) {
 			})
 		}
 	})
+	return grip.Dragging()
+}
 
-	px, py, _ := grip.PointerPosition()
-	pressed := grip.Pressed()
-	dx, dy, held := grip.Dragged()
-	_, _, ended := grip.DragEnded()
-
-	if pressed && (!s.paneDrag.active || s.paneDrag.source != id) {
-		wx, wy := x+px, y+py
-		s.setFocus(id)
-		s.paneDrag = paneDragState{active: true, source: id, startX: wx, startY: wy, x: wx, y: wy}
+// paneDropZones makes a pane take a dragged pane: the center swaps, and
+// the quarters split toward the edge. drop is native Drag/Drop; no pointer
+// arithmetic belongs to the app.
+func (s *Shell) paneDropZones(c *mui.Context, t *mui.Theme, id string, r mui.Rect, active bool) {
+	zones := []struct {
+		edge       string
+		x, y, w, h float32
+	}{
+		{"left", r.X, r.Y, r.W * 0.25, r.H},
+		{"right", r.X + r.W*0.75, r.Y, r.W * 0.25, r.H},
+		{"up", r.X, r.Y, r.W, r.H * 0.25},
+		{"down", r.X, r.Y + r.H*0.75, r.W, r.H * 0.25},
+		{"", r.X + r.W*0.25, r.Y + r.H*0.25, r.W * 0.5, r.H * 0.5},
 	}
-	if !s.paneDrag.active || s.paneDrag.source != id {
+	for _, z := range zones {
+		key := "shell/pane-drop/" + id + "/" + z.edge
+		zone := mui.Box(c).
+			Key(key).
+			Absolute().
+			Left(z.x).
+			Top(z.y).
+			Size(z.w, z.h).
+			Radius(6).
+			IgnoreInput(!active)
+		if source, ok := mui.DragOver[string](zone); ok && source != id {
+			zone.Background(t.Accent.Alpha(0.15)).Border(2, t.Accent)
+		}
+		if source, ok := mui.Drop[string](zone); ok && source != id {
+			s.dropPane(source, id, z.edge)
+		}
+	}
+}
+
+// dropPane runs the split or swap one drop asks for.
+func (s *Shell) dropPane(source, target, edge string) {
+	if edge == "" {
+		s.run(api.CmdPaneSwap, map[string]any{"a": source, "b": target})
 		return
 	}
-	if held {
-		// Dragged keeps reporting after the pointer leaves the grip.
-		s.paneDrag.x += dx
-		s.paneDrag.y += dy
-		if !s.paneDrag.moved {
-			mx, my := s.paneDrag.x-s.paneDrag.startX, s.paneDrag.y-s.paneDrag.startY
-			if mx*mx+my*my >= paneDragSlop*paneDragSlop {
-				s.paneDrag.moved = true
-			}
-		}
+	dir := "right"
+	if edge == "up" || edge == "down" {
+		dir = "down"
 	}
-	switch {
-	case ended:
-		if s.paneDrag.moved {
-			s.updatePaneDrop(id)
-		}
-		s.finishPaneDrag()
-	case !held:
-		// A press that never moved is a click, not a drop.
-		s.paneDrag = paneDragState{}
-	default:
-		s.updatePaneDrop(id)
+	if err := s.app.Run(api.CmdPaneSplit, map[string]any{
+		"pane":      target,
+		"id":        target,
+		"direction": dir,
+	}); err != nil {
+		s.toast = err.Error()
+		return
+	}
+	if edge == "left" || edge == "up" {
+		s.run(api.CmdPaneSwap, map[string]any{"direction": edge})
 	}
 }
 
@@ -164,127 +167,4 @@ func tabPaneRects(tab *api.Tab) map[string]paneRect {
 	}
 	collectRects(tab.Root, paneRect{0, 0, 1, 1}, out)
 	return out
-}
-
-// updatePaneDrop finds the pane under the pointer and which part of it the
-// drop would split, or its center to swap.
-func (s *Shell) updatePaneDrop(source string) {
-	s.paneDrag.target, s.paneDrag.edge = "", ""
-	_, tab := s.activeTab()
-	if tab == nil {
-		return
-	}
-	rects := tabPaneRects(tab)
-	ids := make([]string, 0, len(rects))
-	for id := range rects {
-		if id != source {
-			ids = append(ids, id)
-		}
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		r := s.windowPaneRect(rects[id])
-		if !r.Contains(s.paneDrag.x, s.paneDrag.y) {
-			continue
-		}
-		s.paneDrag.target = id
-		s.paneDrag.edge = paneEdgeAt(r, s.paneDrag.x, s.paneDrag.y)
-		return
-	}
-}
-
-// paneEdgeAt returns the edge a drop near one would split, or "" for the
-// center.
-func paneEdgeAt(r mui.Rect, x, y float32) string {
-	if r.W <= 0 || r.H <= 0 {
-		return ""
-	}
-	fx := (x - r.X) / r.W
-	fy := (y - r.Y) / r.H
-	type edgeDistance struct {
-		distance float32
-		name     string
-	}
-	edges := []edgeDistance{
-		{fx, "left"},
-		{1 - fx, "right"},
-		{fy, "up"},
-		{1 - fy, "down"},
-	}
-	best := edges[0]
-	for _, e := range edges[1:] {
-		if e.distance < best.distance {
-			best = e
-		}
-	}
-	if best.distance >= paneDropShare {
-		return ""
-	}
-	return best.name
-}
-
-// paneDropPreview paints where the drop would go.
-func (s *Shell) paneDropPreview(c *mui.Context, t *mui.Theme, rects map[string]paneRect) {
-	if !s.paneDrag.active || !s.paneDrag.moved || s.paneDrag.target == "" {
-		return
-	}
-	fr, ok := rects[s.paneDrag.target]
-	if !ok {
-		return
-	}
-	r := s.windowPaneRect(fr)
-	switch s.paneDrag.edge {
-	case "left":
-		r.W /= 2
-	case "right":
-		r.X += r.W / 2
-		r.W /= 2
-	case "up":
-		r.H /= 2
-	case "down":
-		r.Y += r.H / 2
-		r.H /= 2
-	}
-	mui.Box(c).
-		Key("shell/pane-drop").
-		Absolute().
-		Left(r.X).
-		Top(r.Y).
-		Size(r.W, r.H).
-		Radius(6).
-		Background(t.Accent.Alpha(0.18)).
-		Border(2, t.Accent).
-		IgnoreInput(true)
-}
-
-// finishPaneDrag runs the split or swap the drop asks for, then clears the
-// drag. Escape clears it before the pointer lets go, so nothing runs.
-func (s *Shell) finishPaneDrag() {
-	drag := s.paneDrag
-	s.paneDrag = paneDragState{}
-	if !drag.active || !drag.moved || drag.target == "" || drag.target == drag.source {
-		return
-	}
-	if drag.edge == "" {
-		s.run(api.CmdPaneSwap, map[string]any{"a": drag.source, "b": drag.target})
-		return
-	}
-	dir := "right"
-	if drag.edge == "up" || drag.edge == "down" {
-		dir = "down"
-	}
-	if err := s.app.Run(api.CmdPaneSplit, map[string]any{
-		"pane":      drag.target,
-		"id":        drag.target,
-		"direction": dir,
-	}); err != nil {
-		s.toast = err.Error()
-		return
-	}
-	// The split command always puts the new pane on the right or bottom.
-	// Dropping on the opposite edge flips the pair, so the split lands
-	// under the pointer.
-	if drag.edge == "left" || drag.edge == "up" {
-		s.run(api.CmdPaneSwap, map[string]any{"direction": drag.edge})
-	}
 }

@@ -4,6 +4,8 @@
 
 - Go 1.27.3.
 - `hc` from herdr-core on `PATH`, and a core running (or startable).
+- A POSIX `sh` for `just`: macOS and Linux ship one; on Windows, Git for
+  Windows puts `sh` on `PATH`.
 - A mygo checkout is optional, for reading its source. The build uses the
   version pinned in `apps/desktop/go.mod`; it does not link a local
   checkout.

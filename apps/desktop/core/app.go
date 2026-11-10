@@ -34,6 +34,11 @@ type App struct {
 	settings store.Settings
 	store    *store.Store
 
+	// OS and architecture detected through machine.exec, keyed by machine
+	// name. probing keeps one probe per machine in flight.
+	machineOS      map[string]machineOS
+	machineProbing map[string]bool
+
 	cmds []*cmd
 	byID map[string]*cmd
 
@@ -70,7 +75,13 @@ func New() *App {
 }
 
 func newApp(st *store.Store) *App {
-	a := &App{store: st, conn: Connecting, settings: store.DefaultSettings()}
+	a := &App{
+		store:          st,
+		conn:           Connecting,
+		settings:       store.DefaultSettings(),
+		machineOS:      map[string]machineOS{},
+		machineProbing: map[string]bool{},
+	}
 	if st != nil {
 		state, err := st.LoadState()
 		if err == nil {
@@ -178,6 +189,10 @@ func (a *App) SetInvalidator(fn func()) {
 	a.invalidate = fn
 	a.mu.Unlock()
 }
+
+// Invalidate asks the shell to draw another frame. Watchers use it from
+// their goroutines; it is safe when no window is open.
+func (a *App) Invalidate() { a.invalidateUI() }
 
 func (a *App) invalidateUI() {
 	a.mu.RLock()

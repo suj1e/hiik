@@ -259,7 +259,9 @@ func renderMachines(rc *api.RenderContext) {
 	allMachines := rc.App.Machines()
 	machines := machineVisibleMachines(allMachines)
 
-	ui.Column(c).Fill().Gap(6).Padding(8).Children(func() {
+	root := ui.Column(c).Fill().Gap(6).Padding(8)
+	listState := ui.Local(root, "machines/list", func() ui.ListState { return ui.ListState{} })
+	root.Children(func() {
 		ui.Row(c).Height(26).AlignItems(ui.Center).Gap(8).Children(func() {
 			ui.Text(c, "Machines").FontSize(t.FontSize - 2).Bold().TextColor(t.TextMuted)
 			ui.Box(c).Grow(1)
@@ -277,13 +279,11 @@ func renderMachines(rc *api.RenderContext) {
 				FontSize(t.FontSize - 2).
 				TextColor(t.TextMuted)
 		} else {
-			ui.Scroll(c).Grow(1).Children(func() {
-				ui.Column(c).Gap(2).Children(func() {
-					for _, m := range machines {
-						machineRow(rc, m, t)
-					}
-				})
-			})
+			listState.Key = func(i int) any { return machines[i].Name }
+			listState.Label = func(i int) string { return machines[i].Name }
+			ui.List(c, listState, len(machines), func(i int) {
+				machineRow(rc, machines[i], t)
+			}).Grow(1)
 		}
 
 		machineAddForm(rc, t)
@@ -377,6 +377,19 @@ func machineCount(n int) string {
 	return fmt.Sprintf("%d machines", n)
 }
 
+// machineOSDetail is the OS badge's tooltip: the OS and the architecture
+// the probe learned. The row itself shows only the OS.
+func machineOSDetail(m api.Machine) string {
+	switch {
+	case m.OS == "":
+		return ""
+	case m.Arch == "":
+		return m.OS
+	default:
+		return m.OS + " · " + m.Arch
+	}
+}
+
 func machineRow(rc *api.RenderContext, m api.Machine, t *ui.Theme) {
 	c := rc.C
 	label := m.Name
@@ -399,6 +412,13 @@ func machineRow(rc *api.RenderContext, m api.Machine, t *ui.Theme) {
 				Background(machineStateColor(t, m.State)).
 				Tooltip(machineStateLabel(m.State))
 			ui.Text(c, label).FontSize(t.FontSize).Bold().SingleLine()
+			if detail := machineOSDetail(m); detail != "" {
+				ui.Text(c, m.OS).
+					FontSize(t.FontSize - 2).
+					TextColor(t.TextMuted).
+					SingleLine().
+					Tooltip(detail)
+			}
 			host := m.Host
 			if host == "" {
 				host = m.Name

@@ -2,11 +2,11 @@ package builtin
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 
+	"hiik/icons"
 	"hiik/mods/api"
 )
 
@@ -64,10 +64,10 @@ func renderStatus(rc *api.RenderContext) {
 	}
 
 	muted := t.TextMuted
-	label := func(glyph, text string) {
-		ui.Row(rc.C).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(rc.C, glyph).FontSize(12).TextColor(muted)
-			ui.Text(rc.C, text).FontSize(11).TextColor(muted).SingleLine()
+	label := func(icon *ui.SVG, text string) {
+		ui.Row(rc.C).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+			ui.Icon(rc.C, icon).FontSize(t.FontSize).TextColor(muted)
+			ui.Text(rc.C, text).FontSize(t.FontSize - 2).TextColor(muted).SingleLine()
 		})
 	}
 
@@ -75,8 +75,8 @@ func renderStatus(rc *api.RenderContext) {
 		Key("mods/status/bar").
 		FillWidth().
 		Height(statusHeight).
-		Padding(0, 14).
-		Gap(16).
+		Padding(0, t.Space(3.5)).
+		Gap(t.Space(4)).
 		AlignItems(ui.Center).
 		Background(t.Surface).
 		BorderWidth(1, 0, 0, 0).
@@ -86,7 +86,7 @@ func renderStatus(rc *api.RenderContext) {
 		if sp != nil && sp.Machine != "" {
 			machine = sp.Machine
 		}
-		label(spaceMachineGlyph(spMachine(sp)), machine)
+		label(spaceMachineIcon(spMachine(sp)), machine)
 		branch := sideStr(rc.Props, "branch")
 		if branch == "" && sp != nil && sp.Folder != "" {
 			cache := ui.Local(root, "mods/status/git", newSpaceGitCache)
@@ -97,37 +97,42 @@ func renderStatus(rc *api.RenderContext) {
 			}
 		}
 		if branch != "" {
-			label("⑂", branch)
+			label(icons.Branch, branch)
 		}
-		ui.Row(rc.C).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Badge(rc.C, fmt.Sprintf("%d agents", count))
+		ui.Row(rc.C).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+			dot := muted
 			if needs > 0 {
-				ui.Badge(rc.C, fmt.Sprintf("· %d needs you", needs)).TextColor(t.Danger)
+				dot = t.Danger
+			}
+			ui.Box(rc.C).Size(6, 6).Radius(3).Background(dot)
+			ui.Text(rc.C, fmt.Sprintf("%d agents", count)).FontSize(t.FontSize - 2).TextColor(muted)
+			if needs > 0 {
+				ui.Text(rc.C, fmt.Sprintf("%d needs you", needs)).FontSize(t.FontSize - 2).TextColor(t.Danger)
 			}
 		})
 		ui.Box(rc.C).Grow(1)
 		if conn == "disconnected" {
 			retry := ui.ButtonBase(rc.C).
 				Key("mods/status/retry").
-				Height(20).
-				Padding(0, 6).
-				Radius(3).
+				Height(t.Space(5)).
+				Padding(0, t.Space(1.5)).
+				Radius(t.Space(1)).
 				Label("Retry core connection").
 				Tooltip("Retry core connection")
 			retry.Children(func() {
-				ui.Text(rc.C, "Retry").FontSize(10).TextColor(t.Accent)
+				ui.Text(rc.C, "Retry").FontSize(t.FontSize - 3).TextColor(t.Accent)
 			})
 			retry.OnClick(func() { _ = rc.App.Run(api.CmdRetryCore, nil) })
 		}
 		palette := ui.ButtonBase(rc.C).
 			Key("mods/status/palette").
-			Height(20).
-			Padding(0, 6).
-			Radius(3).
+			Height(t.Space(5)).
+			Padding(0, t.Space(1.5)).
+			Radius(t.Space(1)).
 			Label("Command palette").
 			Tooltip("Command palette")
 		palette.Children(func() {
-			ui.Text(rc.C, statusPaletteHint(rc)).FontSize(10.5).TextColor(muted)
+			ui.Text(rc.C, statusPaletteHint(rc)).FontSize(t.FontSize - 2.5).TextColor(muted)
 		})
 		palette.OnClick(func() { _ = rc.App.Run(api.CmdPalette, nil) })
 	})
@@ -166,59 +171,7 @@ func statusPaletteHint(rc *api.RenderContext) string {
 		if chord == "" {
 			return "commands"
 		}
-		return statusChordLabel(chord) + "  commands"
+		return api.FormatChord(chord) + "  commands"
 	}
 	return "commands"
-}
-
-// statusChordLabel formats a chord as the platform shows it.
-func statusChordLabel(chord string) string {
-	raw := strings.TrimSpace(chord)
-	if raw == "" {
-		return ""
-	}
-	sep := "+"
-	if !strings.Contains(raw, "+") && strings.Contains(raw, "-") {
-		sep = "-"
-	}
-	parts := strings.Split(raw, sep)
-	key := parts[len(parts)-1]
-	if key == "" && len(parts) > 1 {
-		key = parts[len(parts)-2]
-		parts = parts[:len(parts)-2]
-	}
-	var mods []string
-	for _, part := range parts[:len(parts)-1] {
-		switch strings.ToLower(strings.TrimSpace(part)) {
-		case "cmd", "command", "super", "meta", "mod":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⌘")
-			} else {
-				mods = append(mods, "Cmd+")
-			}
-		case "ctrl", "control":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⌃")
-			} else {
-				mods = append(mods, "Ctrl+")
-			}
-		case "alt", "opt", "option":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⌥")
-			} else {
-				mods = append(mods, "Alt+")
-			}
-		case "shift":
-			if runtime.GOOS == "darwin" {
-				mods = append(mods, "⇧")
-			} else {
-				mods = append(mods, "Shift+")
-			}
-		}
-	}
-	key = strings.ToUpper(key)
-	if key == "" {
-		return ""
-	}
-	return strings.Join(mods, "") + key
 }
